@@ -712,23 +712,6 @@
   color: #2b1a10;
 }
 
-/* "Take the next page" after a phone camera photo */
-.sc-again {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
-  padding: 0.75rem 1.1rem;
-  border-radius: 999px;
-  font-weight: 700;
-  cursor: pointer;
-  color: var(--sc-text, inherit);
-  background: var(--sc-surface-2, rgba(255, 255, 255, 0.08));
-}
-.sc-again.hidden {
-  display: none;
-}
-
 /* ------------------------------------------------------------ editor */
 .sc-edit {
   position: fixed;

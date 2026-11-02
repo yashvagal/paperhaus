@@ -1691,9 +1691,8 @@ function setMode(mode: Mode): void {
   const qr = mode === 'qr';
   $('sc-qr-panel').classList.toggle('hidden', !qr);
   $('sc-photo-label').classList.toggle('hidden', qr || !isTouch());
-  if (qr) $('sc-photo-again').classList.add('hidden');
   $('sc-camera').querySelector('strong')!.textContent = qr ? 'Scan a QR code' : 'Open camera';
-  $('sc-camera').querySelector('small')!.textContent = qr ? 'Reads it instantly' : 'Live edge detection and auto-capture';
+  $('sc-camera').querySelector('small')!.textContent = qr ? 'Reads it instantly' : 'One page or many, with auto-capture';
   $('sc-import-label').querySelector('strong')!.textContent = qr ? 'Read from a photo' : 'Import photos';
   $<HTMLInputElement>('sc-import').multiple = !qr;
   if (qr) renderQr();
@@ -1732,13 +1731,7 @@ function bind(): void {
     input.addEventListener('change', () => {
       const files = Array.from(input.files || []);
       input.value = '';
-      if (!files.length) return;
-      void importFiles(files);
-      // One photo per trip to the camera app, so offer the next page straight away.
-      if (id === 'sc-photo') {
-        $('sc-photo-again').classList.remove('hidden');
-        setHint('Page added. Tap "Take the next page" for each page, then save below.');
-      }
+      if (files.length) void importFiles(files);
     });
   }
 
@@ -1799,7 +1792,6 @@ function bind(): void {
     state.pages.forEach((p) => dropThumb(p.id));
     state.pages = [];
     pendingIdPage = null;
-    $('sc-photo-again').classList.add('hidden');
     persist();
     renderGrid();
     $('sc-result').textContent = '';
