@@ -1,7 +1,7 @@
 /* Paperhaus Scan: a CamScanner-style scanner that runs entirely in the browser.
  *
- * Camera (live edge detection, auto-capture, tap to focus and a focus slider,
- * flashlight, one page or many pages per session), photo import,
+ * Camera (live edge detection, auto-capture, flashlight, one page or many pages per
+ * session, and corners you set yourself when the page is not found), photo import,
  * crop with draggable corners and a magnifier, enhance filters, page reordering,
  * ID card and book modes, QR codes, and export to PDF (optionally searchable and
  * password protected), images, the share sheet, or plain text.
@@ -45,6 +45,8 @@ interface Page {
   brightness: number;
   contrast: number;
   split: number;
+  /** The page edges were not found, so the corners need setting by hand. */
+  check?: boolean;
 }
 
 interface Rendered {
@@ -85,6 +87,15 @@ const FULL: Corners = [
   [1, 0],
   [1, 1],
   [0, 1],
+];
+
+// Where the corners start when the page could not be found: a little inside the photo,
+// so every handle is easy to grab and drag onto the page.
+const GUESS: Corners = [
+  [0.1, 0.1],
+  [0.9, 0.1],
+  [0.9, 0.9],
+  [0.1, 0.9],
 ];
 
 const MODE_HINTS: Record<Mode, string> = {
@@ -430,7 +441,7 @@ function renderGrid(): void {
 }
 
 function stamp(p: Page): string {
-  return [p.rotation, p.filter, p.brightness, p.contrast, p.split, p.shots.length, ...p.shots.map((s) => s.corners.flat().join(','))].join('|');
+  return [p.check ? 'check' : '', p.rotation, p.filter, p.brightness, p.contrast, p.split, p.shots.length, ...p.shots.map((s) => s.corners.flat().join(','))].join('|');
 }
 
 function buildCard(page: Page): HTMLElement {
@@ -462,7 +473,12 @@ function buildCard(page: Page): HTMLElement {
   const num = document.createElement('span');
   num.className = 'sc-num';
   foot.appendChild(num);
-  if (page.kind !== 'doc') {
+  if (page.check) {
+    const tag = document.createElement('span');
+    tag.className = 'sc-tag sc-tag-check';
+    tag.textContent = 'Set corners';
+    foot.appendChild(tag);
+  } else if (page.kind !== 'doc') {
     const tag = document.createElement('span');
     tag.className = 'sc-tag';
     tag.textContent = page.kind === 'id' ? (page.shots.length > 1 ? 'ID card' : 'ID, front') : 'Book';
@@ -581,13 +597,21 @@ async function runImport(files: File[], mode: Mode): Promise<void> {
     return;
   }
   const kind: Kind = mode;
+  let unfound = 0;
   try {
     await getEngine();
     for (let i = 0; i < images.length; i++) {
       showLoader(`Preparing page ${i + 1} of ${images.length}...`);
       try {
         const shot = await ingest(images[i]);
-        addShot({ blob: shot.blob, w: shot.w, h: shot.h, corners: shot.corners, auto: shot.found ? shot.corners : null }, kind);
+        const page = addShot(
+          { blob: shot.blob, w: shot.w, h: shot.h, corners: shot.found ? shot.corners : cloneCorners(GUESS), auto: shot.found ? shot.corners : null },
+          kind
+        );
+        if (!shot.found) {
+          page.check = true;
+          unfound++;
+        }
       } catch (err) {
         console.error(err);
         showAlert('Could not read a photo', `${images[i].name} could not be opened. HEIC photos may need to be saved as JPG first.`);
@@ -597,7 +621,16 @@ async function runImport(files: File[], mode: Mode): Promise<void> {
     showAlert('Scanner did not load', String((err as Error).message || err));
   } finally {
     hideLoader();
+    if (unfound) {
+      persist();
+      renderGrid();
+    }
     if (kind === 'id' && pendingIdPage && state.mode === 'id') setHint('Front side added. Add the back side next.');
+    else if (unfound === 1 && images.length === 1) {
+      const last = state.pages[state.pages.length - 1];
+      if (last?.check) openEditor(last.id);
+    } else if (unfound)
+      setHint(`The page edges were not found on ${unfound} of the photos. Tap a page marked "Set corners" and drag its corners onto the page.`);
   }
 }
 
@@ -623,17 +656,17 @@ const cam = {
   // Many pages: keep capturing until Done. One page: close after the first capture.
   multi: true,
   torch: false,
-  // Focus support of this camera, read when it opens.
-  focusModes: [] as string[],
-  focusRange: null as { min: number; max: number; step: number } | null,
-  manualFocus: false,
-  focusQueued: null as number | null,
+  openedAt: 0,
   captured: 0,
   timer: 0,
   small: document.createElement('canvas'),
 };
 
-async function openCamera(purpose: 'scan' | 'qr'): Promise<void> {
+// After setting the corners of a page the camera could not find, go back to the camera.
+let resumeCamera: 'scan' | 'qr' | null = null;
+let resumeCount = 0;
+
+async function openCamera(purpose: 'scan' | 'qr', keepCount = 0): Promise<void> {
   if (!navigator.mediaDevices?.getUserMedia) {
     showAlert('Camera not available', 'This browser cannot use the camera here. Use "Phone camera app" or "Import photos" instead.');
     return;
@@ -672,24 +705,20 @@ async function openCamera(purpose: 'scan' | 'qr'): Promise<void> {
   cam.running = true;
   cam.corners = cam.shown = null;
   cam.stableSince = 0;
-  cam.captured = 0;
+  cam.captured = keepCount;
   cam.torch = false;
   cam.armed = true;
   cam.lastShot = null;
   cam.cooldownUntil = performance.now() + 800;
+  cam.openedAt = performance.now();
   hintHoldUntil = 0;
 
   const video = $<HTMLVideoElement>('sc-video');
   video.srcObject = stream;
   await video.play().catch(() => {});
 
-  const caps = (cam.track.getCapabilities?.() || {}) as MediaTrackCapabilities & {
-    torch?: boolean;
-    focusMode?: string[];
-    focusDistance?: { min: number; max: number; step?: number };
-  };
+  const caps = (cam.track.getCapabilities?.() || {}) as MediaTrackCapabilities & { torch?: boolean };
   $('sc-torch').classList.toggle('hidden', !caps.torch);
-  setupFocus(caps, purpose);
   $('sc-torch').setAttribute('aria-pressed', 'false');
   $('sc-torch').classList.remove('is-on');
   $('sc-auto').classList.toggle('hidden', purpose === 'qr');
@@ -715,8 +744,6 @@ function idHint(): string {
 
 function closeCamera(): void {
   cam.running = false;
-  cam.manualFocus = false;
-  $('sc-focus-panel').classList.add('hidden');
   clearTimeout(cam.timer);
   cam.stream?.getTracks().forEach((t) => t.stop());
   cam.stream = null;
@@ -865,7 +892,8 @@ function onDetect(found: Corners | null): void {
 
   if (!cam.corners) {
     setRing(0);
-    setCamHint(idHint() || 'Looking for a page...');
+    const lost = now - Math.max(cam.lastSeen, cam.openedAt) > 3000;
+    setCamHint(lost ? 'Can\'t find the page? Tap the shutter and set the corners yourself.' : idHint() || 'Looking for a page...');
     return;
   }
   if (!cam.auto || now < cam.cooldownUntil || !cam.armed) {
@@ -900,10 +928,23 @@ async function capture(): Promise<void> {
     cam.stableSince = performance.now();
     setRing(0);
     const shot = await ingest(blob);
-    const corners = shot.found ? shot.corners : liveCorners || FULL;
-    addShot({ blob: shot.blob, w: shot.w, h: shot.h, corners, auto: shot.found ? shot.corners : liveCorners }, cam.kind);
+    const found = shot.found || !!liveCorners;
+    const corners = shot.found ? shot.corners : liveCorners || cloneCorners(GUESS);
+    const page = addShot({ blob: shot.blob, w: shot.w, h: shot.h, corners, auto: shot.found ? shot.corners : liveCorners }, cam.kind);
     cam.captured++;
     updateCamThumb();
+    if (!found) {
+      // The page was not found: set its corners by hand now, then carry on scanning.
+      page.check = true;
+      persist();
+      renderGrid();
+      const again = (cam.multi && cam.kind !== 'id') || (cam.kind === 'id' && pendingIdPage === page);
+      resumeCamera = again ? cam.purpose : null;
+      resumeCount = cam.captured;
+      closeCamera();
+      openEditor(page.id);
+      return;
+    }
     if (cam.kind === 'id' && !pendingIdPage) {
       holdCamHint('Both sides done', 600);
       setTimeout(closeCamera, 500);
@@ -962,145 +1003,6 @@ function syncPagesToggle(): void {
     b.classList.toggle('is-on', on);
     b.setAttribute('aria-pressed', String(on));
   });
-}
-
-// ------------------------------------------------------------------ focus
-// Tap the preview to focus on that spot, or open the focus slider to set it by hand.
-// Chrome and Edge on Android expose these controls. Safari and many laptop webcams do
-// not, so there the camera keeps focusing on its own and a tap says so.
-
-function setupFocus(
-  caps: { focusMode?: string[]; focusDistance?: { min: number; max: number; step?: number } },
-  purpose: 'scan' | 'qr'
-): void {
-  cam.focusModes = Array.isArray(caps.focusMode) ? caps.focusMode : [];
-  const d = caps.focusDistance;
-  cam.focusRange =
-    d && typeof d.min === 'number' && typeof d.max === 'number' && d.max > d.min && cam.focusModes.includes('manual')
-      ? { min: d.min, max: d.max, step: d.step && d.step > 0 ? d.step : (d.max - d.min) / 100 }
-      : null;
-  cam.manualFocus = false;
-  const btn = $('sc-focus');
-  btn.classList.toggle('hidden', !cam.focusRange || purpose === 'qr');
-  btn.classList.remove('is-on');
-  btn.setAttribute('aria-pressed', 'false');
-  $('sc-focus-panel').classList.add('hidden');
-  $('sc-focus-auto').classList.add('is-on');
-  if (cam.focusRange) {
-    const r = $<HTMLInputElement>('sc-focus-range');
-    r.min = String(cam.focusRange.min);
-    r.max = String(cam.focusRange.max);
-    r.step = String(cam.focusRange.step);
-    const now = (cam.track?.getSettings?.() as { focusDistance?: number } | undefined)?.focusDistance;
-    r.value = String(typeof now === 'number' ? now : (cam.focusRange.min + cam.focusRange.max) / 2);
-  }
-}
-
-function canTapFocus(): boolean {
-  return cam.focusModes.includes('single-shot') || cam.focusModes.includes('continuous') || cam.focusModes.includes('manual');
-}
-
-function focusUnsupportedHint(): string {
-  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
-  return ios
-    ? 'This browser focuses on its own. For tap to focus, use Phone camera app.'
-    : 'This camera focuses on its own.';
-}
-
-function showFocusRing(x: number, y: number): void {
-  const ring = $('sc-focus-ring');
-  ring.style.left = `${x}px`;
-  ring.style.top = `${y}px`;
-  ring.classList.remove('go');
-  void ring.offsetWidth;
-  ring.classList.add('go');
-}
-
-/** Screen point (CSS pixels inside the camera view) to a normalised point in the video frame. */
-function toVideo(x: number, y: number): Pt | null {
-  const v = $<HTMLVideoElement>('sc-video');
-  const vw = v.videoWidth;
-  const vh = v.videoHeight;
-  if (!vw || !vh) return null;
-  const s = Math.max(v.clientWidth / vw, v.clientHeight / vh);
-  const dx = (v.clientWidth - vw * s) / 2;
-  const dy = (v.clientHeight - vh * s) / 2;
-  const nx = (x - dx) / (vw * s);
-  const ny = (y - dy) / (vh * s);
-  if (nx < 0 || nx > 1 || ny < 0 || ny > 1) return null;
-  return [nx, ny];
-}
-
-async function applyFocus(set: Record<string, unknown>): Promise<boolean> {
-  if (!cam.track) return false;
-  try {
-    await cam.track.applyConstraints({ advanced: [set as MediaTrackConstraintSet] });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function tapToFocus(ev: PointerEvent): Promise<void> {
-  if (!cam.running || cam.purpose === 'qr') return;
-  const box = $('sc-cam').getBoundingClientRect();
-  const x = ev.clientX - box.left;
-  const y = ev.clientY - box.top;
-  const p = toVideo(x, y);
-  if (!p) return;
-  showFocusRing(x, y);
-  if (!canTapFocus()) {
-    holdCamHint(focusUnsupportedHint(), 3200);
-    return;
-  }
-  // Pick the point, then focus there once (or keep refocusing there if that is all it can do).
-  const mode = cam.focusModes.includes('single-shot') ? 'single-shot' : 'continuous';
-  const ok =
-    (await applyFocus({ pointsOfInterest: [{ x: p[0], y: p[1] }], focusMode: mode })) ||
-    (await applyFocus({ focusMode: mode }));
-  if (ok) {
-    cam.manualFocus = false;
-    $('sc-focus-auto').classList.add('is-on');
-    holdCamHint('Focusing here');
-  } else holdCamHint(focusUnsupportedHint(), 3200);
-  // Give the lens a moment before auto-capture counts the page as steady.
-  cam.stableSince = performance.now();
-}
-
-function toggleFocusPanel(): void {
-  const panel = $('sc-focus-panel');
-  const open = panel.classList.contains('hidden');
-  panel.classList.toggle('hidden', !open);
-  $('sc-focus').classList.toggle('is-on', open);
-  $('sc-focus').setAttribute('aria-pressed', String(open));
-}
-
-function setFocusDistance(value: number): void {
-  // Apply at most once per frame while the slider is dragged.
-  const first = cam.focusQueued === null;
-  cam.focusQueued = value;
-  if (!first) return;
-  requestAnimationFrame(async () => {
-    const v = cam.focusQueued;
-    cam.focusQueued = null;
-    if (v === null) return;
-    if (await applyFocus({ focusMode: 'manual', focusDistance: v })) {
-      cam.manualFocus = true;
-      $('sc-focus-auto').classList.remove('is-on');
-      holdCamHint('Manual focus');
-    }
-    cam.stableSince = performance.now();
-  });
-}
-
-async function autoFocus(): Promise<void> {
-  const mode = cam.focusModes.includes('continuous') ? 'continuous' : 'single-shot';
-  if (await applyFocus({ focusMode: mode })) {
-    cam.manualFocus = false;
-    $('sc-focus-auto').classList.add('is-on');
-    holdCamHint('Auto focus');
-  }
-  cam.stableSince = performance.now();
 }
 
 // ------------------------------------------------------------------ QR
@@ -1179,6 +1081,10 @@ const ed = {
   previewUrl: '',
 };
 
+function cloneCorners(c: Corners): Corners {
+  return c.map((p) => [...p]) as Corners;
+}
+
 function clonePage(p: Page): Page {
   return { ...p, shots: p.shots.map((s) => ({ ...s, corners: s.corners.map((c) => [...c]) as Corners, auto: s.auto ?? null })) };
 }
@@ -1193,6 +1099,7 @@ function openEditor(id: string, tab: 'crop' | 'look' = 'crop'): void {
   document.body.classList.add('sc-noscroll');
   $('sc-side').classList.toggle('hidden', page.kind !== 'id' || page.shots.length < 2);
   $('sc-split-field').classList.toggle('hidden', page.kind !== 'book');
+  $('sc-edit-note').classList.toggle('hidden', !page.check);
   setSide(0);
   buildFilterChips();
   syncLookControls();
@@ -1205,6 +1112,11 @@ function closeEditor(): void {
   if (ed.previewUrl) URL.revokeObjectURL(ed.previewUrl);
   ed.previewUrl = '';
   ed.page = ed.original = null;
+  if (resumeCamera) {
+    const purpose = resumeCamera;
+    resumeCamera = null;
+    void openCamera(purpose, resumeCount);
+  }
 }
 
 function saveEditor(): void {
@@ -1212,6 +1124,7 @@ function saveEditor(): void {
   const i = state.pages.indexOf(ed.original);
   if (i >= 0) {
     ed.page.shots.forEach((s) => (s.corners = orderCorners(s.corners)));
+    ed.page.check = false;
     state.pages[i] = ed.page;
     if (pendingIdPage === ed.original) pendingIdPage = ed.page;
     dropThumb(ed.page.id);
@@ -1741,12 +1654,6 @@ function bind(): void {
   $('sc-cam-thumb').addEventListener('click', closeCamera);
   $('sc-shutter').addEventListener('click', () => void capture());
   $('sc-torch').addEventListener('click', () => void toggleTorch());
-  $('sc-overlay').addEventListener('pointerup', (e) => void tapToFocus(e as PointerEvent));
-  $('sc-focus').addEventListener('click', toggleFocusPanel);
-  $('sc-focus-auto').addEventListener('click', () => void autoFocus());
-  $<HTMLInputElement>('sc-focus-range').addEventListener('input', (e) =>
-    setFocusDistance(Number((e.target as HTMLInputElement).value))
-  );
   document.querySelectorAll<HTMLElement>('#sc-cam-pages button').forEach((b) =>
     b.addEventListener('click', () => {
       cam.multi = b.dataset.multi === '1';

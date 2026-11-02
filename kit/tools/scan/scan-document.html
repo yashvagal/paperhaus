@@ -201,7 +201,6 @@
         <button id="sc-cam-close" class="sc-round" aria-label="Close camera"><i class="ph ph-x"></i></button>
         <span id="sc-cam-mode" class="sc-cam-pill">Document</span>
         <div class="sc-cam-right">
-          <button id="sc-focus" class="sc-round hidden" aria-label="Manual focus" aria-pressed="false" aria-controls="sc-focus-panel"><i class="ph ph-crosshair-simple"></i></button>
           <button id="sc-torch" class="sc-round hidden" aria-label="Flashlight" aria-pressed="false"><i class="ph ph-flashlight"></i></button>
           <button id="sc-auto" class="sc-round is-on" aria-label="Auto-capture" aria-pressed="true"><i class="ph ph-lightning"></i><b>A</b></button>
         </div>
@@ -209,13 +208,6 @@
       <div id="sc-cam-pages" class="sc-cam-seg" role="group" aria-label="How many pages">
         <button type="button" data-multi="0" aria-pressed="false">One page</button>
         <button type="button" data-multi="1" aria-pressed="true" class="is-on">Many pages</button>
-      </div>
-      <div id="sc-focus-ring" class="sc-focus-ring" aria-hidden="true"></div>
-      <div id="sc-focus-panel" class="sc-focus-panel hidden">
-        <span>Near</span>
-        <input id="sc-focus-range" type="range" aria-label="Focus distance" />
-        <span>Far</span>
-        <button id="sc-focus-auto" type="button" class="sc-focus-auto">Auto</button>
       </div>
       <p id="sc-cam-hint" class="sc-cam-hint">Looking for a page...</p>
       <div class="sc-cam-bottom">
@@ -244,6 +236,9 @@
         </div>
         <button id="sc-edit-done" class="btn-gradient sc-btn sc-btn-sm" type="button">Done</button>
       </div>
+      <p id="sc-edit-note" class="sc-edit-note hidden">
+        <i class="ph ph-hand-pointing"></i> The page edges weren't found. Drag the corners onto the page, then tap Done.
+      </p>
       <div id="sc-stage" class="sc-stage">
         <div id="sc-crop" class="sc-crop">
           <img id="sc-crop-img" alt="Page photo" draggable="false" />
