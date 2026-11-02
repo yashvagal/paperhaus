@@ -1,0 +1,166 @@
+/* Lofi: the QuackCode sibling.
+ * Oat cream ground, cocoa ink, lowercase IBM Plex Mono headlines with Plex Sans for
+ * reading, soft long shadows, generous radii, pill buttons. The home header is one
+ * pastel apricot band, like QuackCode's duck band, that turns cocoa after dark.
+ * Accent: burnt orange, with a warm peach lamp dot.
+ */
+:root,
+:host {
+  --bg: #f7efe2;
+  --surface: #fffaf2;
+  --surface-2: #f1e6d4;
+  --line: #e6d8c2;
+  --line-strong: #d0bc9e;
+  --text: #3a2a20;
+  --text-2: #6a5444;
+  --muted: #7d6a58;
+  --accent: #a84c1c;
+  --accent-hover: #873b14;
+  --accent-soft: #fde2cc;
+  --on-accent: #3a2a20;
+  --btn-bg: #3a2a20;
+  --btn-bg-hover: #4d3a2d;
+  --btn-text: #fffaf2;
+  --good: #2f6b47;
+  --good-soft: #dcecdf;
+  --peach: #f6b88a;
+  --night: #f8cba6;
+  --night-2: #fbdcc1;
+  --night-text: #3a2a20;
+  --night-muted: #6b4a36;
+  --night-accent: #9a4518;
+  --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-display: 'IBM Plex Mono', ui-monospace, monospace;
+  --font-em: 'IBM Plex Mono', ui-monospace, monospace;
+  --display-weight: 500;
+  --display-tracking: -0.03em;
+  --display-case: lowercase;
+  --r-card: 22px;
+  --r-input: 14px;
+  --shadow-card: 0 1px 0 rgba(58, 42, 32, 0.04), 0 18px 40px -32px rgba(58, 42, 32, 0.45);
+  --shadow-lift: 0 26px 50px -30px rgba(58, 42, 32, 0.5);
+}
+@media (prefers-color-scheme: dark) {
+  :root,
+  :host {
+    --bg: #1d1712;
+    --surface: #27201a;
+    --surface-2: #312820;
+    --line: #3d3228;
+    --line-strong: #524437;
+    --text: #f5ead9;
+    --text-2: #cdbba4;
+    --muted: #a38e77;
+    --accent: #f6b88a;
+    --accent-hover: #f9cba6;
+    --accent-soft: #3f2b1d;
+    --on-accent: #1d1712;
+    --btn-bg: #f6b88a;
+    --btn-bg-hover: #f9cba6;
+    --btn-text: #1d1712;
+    --good: #8cc9a0;
+    --good-soft: #1f3226;
+    --bad: #ff9c8f;
+    --bad-soft: #3b1f1c;
+    --warn: #f2c27a;
+    --warn-soft: #3a2b14;
+    --night: #3a2a20;
+    --night-2: #4a372a;
+    --night-text: #f5ead9;
+    --night-muted: #d1b49c;
+    --night-accent: #f6b88a;
+    --shadow-card: 0 18px 40px -32px rgba(0, 0, 0, 0.9);
+    --shadow-lift: 0 26px 50px -30px rgba(0, 0, 0, 0.95);
+  }
+}
+
+/* The night band */
+#tools-header {
+  margin-top: 0.5rem;
+  padding: clamp(1.75rem, 5vw, 3.5rem);
+  border-radius: 28px;
+  background: var(--night);
+  color: var(--night-text);
+  box-shadow: var(--shadow-lift);
+  position: relative;
+  overflow: hidden;
+}
+#tools-header::after {
+  /* a soft glow of lamp light in the corner */
+  content: '';
+  position: absolute;
+  right: -12%;
+  top: -40%;
+  width: 55%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 246, 232, 0.55), rgba(255, 236, 214, 0.18) 45%, transparent 70%);
+  pointer-events: none;
+}
+#tools-header h1.ph-title {
+  color: var(--night-text);
+  font-size: clamp(2.2rem, 5.4vw, 4.2rem);
+}
+#tools-header h1.ph-title em {
+  color: var(--night-accent);
+}
+.ph-eyebrow {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  color: var(--night-muted);
+}
+.ph-eyebrow::before {
+  content: '~/';
+}
+.ph-lede {
+  color: var(--night-muted);
+}
+.ph-note {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: var(--night-text);
+  background: var(--night-2);
+  border: 1px solid rgba(58, 42, 32, 0.12);
+  border-radius: 999px;
+  padding: 0.45rem 0.85rem 0.45rem 0.7rem;
+}
+.ph-note::before {
+  background: var(--night-accent);
+  box-shadow: 0 0 0 4px rgba(242, 166, 90, 0.25);
+}
+
+.category-header {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  text-transform: lowercase;
+  font-size: 1.15rem;
+  font-weight: 500;
+}
+.category-header > span::before {
+  content: '// ';
+  color: var(--muted);
+}
+
+/* Tool icons sit in a soft tinted circle. */
+.tool-card {
+  border-color: transparent;
+}
+.tool-card i {
+  width: 3.25rem;
+  height: 3.25rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 1.6rem;
+}
+.tool-card:hover {
+  border-color: var(--line);
+}
+.tool-card:hover i {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+#tool-uploader {
+  border-color: transparent;
+  box-shadow: var(--shadow-lift);
+}

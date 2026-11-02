@@ -1,0 +1,194 @@
+/* Crayon: the StudiUp sibling.
+ * Warm cream pages, Bricolage Grotesque headlines over Figtree, an Instrument Serif
+ * word, espresso pill buttons with a pastel orange lip, a floating pill nav, tilted
+ * stickers, and a box of pastel peach, apricot, coral and butter: each tool category
+ * gets its own, the way each StudiUp exam has one.
+ */
+:root,
+:host {
+  --bg: #fff9f0;
+  --surface: #fffdf9;
+  --surface-2: #f6eddf;
+  --line: #ecdfcc;
+  --line-strong: #d8c5a8;
+  --text: #2a211a;
+  --text-2: #4e4136;
+  --muted: #76675a;
+  --accent: #a84c1c;
+  --accent-hover: #873b14;
+  --accent-soft: #fde2cc;
+  --on-accent: #2a211a;
+  --btn-bg: #2a211a;
+  --btn-bg-hover: #2a211a;
+  --btn-text: #fff9f0;
+  --btn-lip: 0 5px 0 0 #f2a65a;
+  --good: #2f6b47;
+  --good-soft: #dcecdf;
+  --c1: #f6b88a;
+  --c2: #f4a39a;
+  --c3: #f6cf8a;
+  --c4: #f2a65a;
+  --c5: #e9b7a0;
+  --c6: #f7c4a5;
+  --font-body: 'Figtree', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque', 'Avenir Next', system-ui, sans-serif;
+  --font-em: 'Instrument Serif', Georgia, serif;
+  --display-weight: 800;
+  --display-tracking: -0.055em;
+  --display-case: none;
+  --r-card: 24px;
+  --r-input: 16px;
+  --shadow-card: inset 0 0 0 1px var(--line);
+  --shadow-lift: inset 0 0 0 1px var(--line), 0 22px 44px -26px rgba(74, 46, 24, 0.45);
+  --nav-bg: rgba(255, 249, 240, 0.88);
+}
+@media (prefers-color-scheme: dark) {
+  :root,
+  :host {
+    --bg: #1b1611;
+    --surface: #251f19;
+    --surface-2: #30281f;
+    --line: #3b3128;
+    --line-strong: #504336;
+    --text: #f7eddf;
+    --text-2: #d0bea7;
+    --muted: #a7927b;
+    --accent: #f6b88a;
+    --accent-hover: #f9cba6;
+    --accent-soft: #3e2a1c;
+    --on-accent: #1b1611;
+    --btn-bg: #f7eddf;
+    --btn-bg-hover: #f7eddf;
+    --btn-text: #2a211a;
+    --btn-lip: 0 5px 0 0 #f2a65a;
+    --good: #8cc9a0;
+    --good-soft: #1f3226;
+    --bad: #ff9c8f;
+    --bad-soft: #3b1f1c;
+    --warn: #f2c27a;
+    --warn-soft: #3a2b14;
+    --c1: #f6b88a;
+    --c2: #f4a39a;
+    --c3: #f6cf8a;
+    --c4: #f2a65a;
+    --c5: #e9b7a0;
+    --c6: #f7c4a5;
+    --shadow-lift: inset 0 0 0 1px var(--line), 0 22px 44px -26px rgba(0, 0, 0, 0.9);
+    --nav-bg: rgba(37, 31, 25, 0.88);
+  }
+}
+
+body {
+  font-size: 17px;
+}
+
+/* Floating pill nav */
+nav[data-simple-nav] {
+  position: sticky;
+  top: 10px;
+  margin: 10px auto 0;
+  width: min(1180px, calc(100% - 24px));
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 8px 18px -12px rgba(74, 46, 24, 0.4), inset 0 0 0 1px var(--line);
+}
+#tools-header h1.ph-title {
+  font-size: clamp(3rem, 7.4vw, 5.6rem);
+  line-height: 0.94;
+}
+/* Crayon highlighter under the italic word */
+#tools-header h1.ph-title em {
+  padding: 0 0.08em;
+  background-image: linear-gradient(90deg, rgba(246, 184, 138, 0.75), rgba(244, 163, 154, 0.7) 35%, rgba(246, 207, 138, 0.75) 70%, rgba(242, 166, 90, 0.7));
+  background-repeat: no-repeat;
+  background-size: 100% 0.36em;
+  background-position: 0 74%;
+}
+.ph-eyebrow {
+  display: none;
+}
+.ph-lede {
+  font-size: clamp(1.1rem, 1.6vw, 1.25rem);
+}
+/* The note becomes a tilted sticker */
+.ph-note {
+  transform: rotate(-2deg);
+  background: var(--c1);
+  color: #2a211a;
+  font-weight: 800;
+  font-size: 0.9rem;
+  padding: 0.5rem 0.95rem;
+  border-radius: 999px;
+  box-shadow: 0 8px 18px -12px rgba(74, 46, 24, 0.5);
+}
+.ph-note::before {
+  background: #2a211a;
+  box-shadow: none;
+}
+
+.category-header {
+  font-size: 1.7rem;
+}
+
+/* A colour per category, cycling through the crayon box */
+/* The groups follow the search box in the page, so the count starts at 2. */
+.category-group:nth-child(6n + 2) { --c: var(--c1); }
+.category-group:nth-child(6n + 3) { --c: var(--c2); }
+.category-group:nth-child(6n + 4) { --c: var(--c3); }
+.category-group:nth-child(6n + 5) { --c: var(--c4); }
+.category-group:nth-child(6n + 6) { --c: var(--c5); }
+.category-group:nth-child(6n + 1) { --c: var(--c6); }
+.category-header > span::before {
+  content: '';
+  display: inline-block;
+  width: 0.55em;
+  height: 0.55em;
+  margin-right: 0.45em;
+  border-radius: 50%;
+  background: var(--c, var(--accent));
+  vertical-align: 0.08em;
+}
+
+.tool-card {
+  border: 0;
+}
+.tool-card i {
+  width: 3.4rem;
+  height: 3.4rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 17px;
+  background: var(--c, var(--accent));
+  color: #2a211a;
+  font-size: 1.7rem;
+  transform: rotate(-4deg);
+  box-shadow: 0 4px 0 0 #2a211a;
+}
+.tool-card:hover {
+  transform: translateY(-4px) rotate(-0.4deg);
+}
+.tool-card:hover i {
+  color: #2a211a;
+}
+@media (prefers-color-scheme: dark) {
+  .tool-card i {
+    color: #2a211a;
+    box-shadow: 0 4px 0 0 rgba(0, 0, 0, 0.6);
+  }
+  .tool-card:hover i {
+    color: #2a211a;
+  }
+}
+
+.btn-gradient:hover:not(:disabled) {
+  box-shadow: 0 6px 0 0 #f2a65a;
+}
+.btn-gradient:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 0 #f2a65a;
+}
+#tool-uploader {
+  border: 0;
+  box-shadow: var(--shadow-lift);
+  border-radius: 30px;
+}

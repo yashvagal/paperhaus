@@ -1,0 +1,561 @@
+/* Paperhaus theme engine.
+ * Shared by every direction in kit/theme/<name>/theme.css. A direction only sets
+ * tokens (colours, type, shape) and a few signature touches; this file maps those
+ * tokens onto BentoPDF's interface. The build joins base.css + theme.css into one
+ * stylesheet, linked after BentoPDF's own styles on every page.
+ *
+ * Unlayered rules beat Tailwind's layered utilities, so most of the work is done by
+ * re-pointing Tailwind's colour variables at the tokens. Because the mapping is by
+ * variable, light and dark mode both follow automatically.
+ */
+
+@font-face { font-family: 'Geist'; font-style: normal; font-weight: 100 900; font-display: swap; src: url('./fonts/geist-latin-wght-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Instrument Serif'; font-style: italic; font-weight: 400; font-display: swap; src: url('./fonts/instrument-serif-latin-400-italic.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('./fonts/ibm-plex-mono-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('./fonts/ibm-plex-mono-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: italic; font-weight: 400; font-display: swap; src: url('./fonts/ibm-plex-mono-latin-400-italic.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('./fonts/ibm-plex-sans-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url('./fonts/ibm-plex-sans-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url('./fonts/ibm-plex-sans-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Bricolage Grotesque'; font-style: normal; font-weight: 200 800; font-display: swap; src: url('./fonts/bricolage-grotesque-latin-wght-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Figtree'; font-style: normal; font-weight: 300 900; font-display: swap; src: url('./fonts/figtree-latin-wght-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Poppins'; font-style: normal; font-weight: 400; font-display: swap; src: url('./fonts/poppins-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Poppins'; font-style: normal; font-weight: 500; font-display: swap; src: url('./fonts/poppins-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Poppins'; font-style: normal; font-weight: 600; font-display: swap; src: url('./fonts/poppins-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Poppins'; font-style: normal; font-weight: 700; font-display: swap; src: url('./fonts/poppins-latin-700-normal.woff2') format('woff2'); }
+
+:root,
+:host {
+  /* Neutral defaults; every direction overrides these. */
+  --bg: #fbfbf9;
+  --surface: #ffffff;
+  --surface-2: #f2f2ee;
+  --line: #e2e2dc;
+  --line-strong: #c9c9c2;
+  --text: #111111;
+  --text-2: #52524e;
+  --muted: #8a8a84;
+  --accent: #1f7a5a;
+  --accent-hover: #17624a;
+  --accent-soft: #e3efe9;
+  --on-accent: #ffffff;
+  --btn-bg: #111111;
+  --btn-bg-hover: #2a2a2a;
+  --btn-text: #ffffff;
+  --btn-lip: none;
+  --good: #1b6b45;
+  --good-soft: #d6f5e3;
+  --bad: #a2302a;
+  --bad-soft: #fbe3e1;
+  --warn: #8a5a00;
+  --warn-soft: #fbefd2;
+  --font-body: 'Geist', system-ui, sans-serif;
+  --font-display: 'Geist', system-ui, sans-serif;
+  --font-em: 'Instrument Serif', Georgia, serif;
+  --display-weight: 500;
+  --display-tracking: -0.035em;
+  --display-case: none;
+  --r-card: 14px;
+  --r-btn: 999px;
+  --r-input: 12px;
+  --shadow-card: none;
+  --shadow-lift: 0 14px 30px -20px rgba(17, 17, 17, 0.35);
+  --nav-bg: color-mix(in srgb, var(--bg) 84%, transparent);
+
+  /* Tailwind's grey scale was built for a dark page. Point each step at a token. */
+  --color-gray-50: var(--text);
+  --color-gray-100: var(--text);
+  --color-gray-200: var(--text);
+  --color-gray-300: var(--text-2);
+  --color-gray-400: var(--text-2);
+  --color-gray-500: var(--muted);
+  --color-gray-600: var(--line-strong);
+  --color-gray-700: var(--surface-2);
+  --color-gray-800: var(--surface);
+  --color-gray-900: var(--bg);
+  --color-slate-200: var(--text);
+
+  /* Indigo and blue were the accent. */
+  --color-indigo-50: var(--accent-soft);
+  --color-indigo-200: var(--accent);
+  --color-indigo-300: var(--accent);
+  --color-indigo-400: var(--accent);
+  --color-indigo-500: var(--accent);
+  --color-indigo-600: var(--accent);
+  --color-indigo-700: var(--accent-hover);
+  --color-indigo-800: var(--accent-soft);
+  --color-indigo-900: var(--accent-soft);
+  --color-blue-300: var(--accent);
+  --color-blue-400: var(--accent);
+  --color-blue-500: var(--accent);
+  --color-blue-600: var(--accent);
+  --color-blue-700: var(--accent-hover);
+  --color-blue-900: var(--accent-soft);
+
+  /* Status colours: readable text on the page, soft fills behind it. */
+  --color-green-100: var(--good);
+  --color-green-200: var(--good);
+  --color-green-300: var(--good);
+  --color-green-400: var(--good);
+  --color-green-500: var(--good);
+  --color-green-600: var(--good);
+  --color-green-700: var(--good);
+  --color-green-900: var(--good-soft);
+  --color-red-100: var(--bad);
+  --color-red-200: var(--bad);
+  --color-red-300: var(--bad);
+  --color-red-400: var(--bad);
+  --color-red-500: var(--bad);
+  --color-red-600: var(--bad);
+  --color-red-700: var(--bad);
+  --color-red-900: var(--bad-soft);
+  --color-yellow-100: var(--warn);
+  --color-yellow-200: var(--warn);
+  --color-yellow-300: var(--warn);
+  --color-yellow-400: var(--warn);
+  --color-yellow-500: var(--warn);
+  --color-yellow-600: var(--warn);
+  --color-yellow-900: var(--warn-soft);
+  --color-amber-300: var(--warn);
+  --color-amber-400: var(--warn);
+  --color-amber-500: var(--warn);
+  --color-amber-900: var(--warn-soft);
+
+  --font-sans: var(--font-body);
+  --radius-sm: 8px;
+  --radius-md: var(--r-input);
+  --radius-lg: var(--r-input);
+  --radius-xl: var(--r-card);
+  --radius-2xl: var(--r-card);
+}
+
+html {
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  html {
+    color-scheme: dark;
+  }
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 16.5px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.text-white {
+  color: var(--text);
+}
+/* White text on solid fills: buttons take the button text colour; delete and success
+   fills take the page colour, which reads on them in both light and dark mode. */
+:is(.btn-gradient, .bg-indigo-500, .bg-indigo-600, .bg-indigo-700, .bg-blue-500, .bg-blue-600) .text-white,
+.text-white:is(.btn-gradient, .bg-indigo-500, .bg-indigo-600, .bg-indigo-700, .bg-blue-500, .bg-blue-600) {
+  color: var(--btn-text);
+}
+:is(.bg-red-500, .bg-red-600, .bg-green-500, .bg-green-600),
+:is(.bg-red-500, .bg-red-600, .bg-green-500, .bg-green-600) .text-white {
+  color: var(--surface);
+}
+.text-white\/50,
+.text-white\/60,
+.text-white\/70 {
+  color: var(--muted);
+}
+.border-gray-600\/50,
+.border-gray-600\/60,
+.border-gray-700\/50 {
+  border-color: var(--line);
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+::selection {
+  background: var(--text);
+  color: var(--bg);
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* -------------------------------------------------------------------- nav */
+
+nav[data-simple-nav] {
+  background: var(--nav-bg);
+  backdrop-filter: saturate(1.4) blur(14px);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+/* The wordmark: lowercase "paperhaus" in Geist, as in the brand kit (kit/brand). */
+#nav-brand,
+nav[data-simple-nav] .text-xl,
+#footer-brand {
+  font-family: 'Geist', 'Helvetica Neue', Arial, sans-serif;
+  font-weight: 600;
+  font-size: 1.4rem;
+  letter-spacing: -0.045em;
+  text-transform: lowercase;
+  color: var(--text);
+}
+#nav-logo,
+nav[data-simple-nav] img,
+#footer-logo {
+  width: 1.9rem;
+  height: 1.9rem;
+  object-fit: contain;
+}
+
+/* -------------------------------------------------------------- home header
+   The build replaces BentoPDF's "PDF Tools" heading with Paperhaus copy
+   (HOME_TITLE, HOME_SUBTITLE and HOME_NOTE in kit.env). */
+
+#tools-header {
+  text-align: left;
+  margin: 0 0 2.5rem;
+  padding: clamp(2rem, 6vw, 4.5rem) 0 clamp(1.5rem, 3vw, 2.25rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+.ph-eyebrow {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+#tools-header h1.ph-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  text-transform: var(--display-case);
+  font-size: clamp(2.6rem, 6.4vw, 5rem);
+  line-height: 1;
+  color: var(--text);
+  max-width: 16ch;
+  text-wrap: balance;
+}
+#tools-header h1.ph-title em {
+  font-family: var(--font-em);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.ph-lede {
+  margin: 0;
+  font-size: clamp(1.05rem, 1.6vw, 1.2rem);
+  color: var(--text-2);
+  max-width: 46ch;
+}
+.ph-note {
+  margin: 0.25rem 0 0;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.ph-note::before {
+  content: '';
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--good);
+  box-shadow: 0 0 0 4px var(--good-soft);
+}
+
+/* Search lines up with the grid's left edge. */
+#grid-view > .mb-8.max-w-lg {
+  margin-left: 0;
+  max-width: 38rem;
+}
+#search-bar {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-btn);
+  color: var(--text);
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+  box-shadow: var(--shadow-card);
+}
+#search-bar::placeholder {
+  color: var(--muted);
+}
+#search-bar:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--line-strong);
+  box-shadow: none;
+}
+#shortcut {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  box-shadow: none;
+  border-radius: 8px;
+  font-family: var(--font-body);
+}
+@media (max-width: 640px) {
+  #shortcut {
+    display: none;
+  }
+}
+
+/* Category headings */
+.category-header {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: -0.025em;
+  font-size: 1.45rem;
+}
+.category-header:hover,
+.category-header:hover .category-chevron {
+  color: var(--accent);
+}
+
+/* ------------------------------------------------------------- tool cards */
+
+.tool-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-card);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.tool-card:hover,
+.tool-card:focus-visible {
+  border-color: var(--line-strong);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lift);
+}
+.tool-card h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.015em;
+}
+.tool-card p {
+  color: var(--muted);
+}
+.tool-card i,
+.tool-card svg {
+  color: var(--text);
+}
+.tool-card:hover i,
+.tool-card:hover svg {
+  color: var(--accent);
+}
+.compact-mode .tool-card {
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.compact-mode .tool-card:hover {
+  background: var(--surface);
+  transform: none;
+  box-shadow: none;
+}
+
+/* ------------------------------------------------------------- tool pages */
+
+#uploader {
+  background: var(--bg);
+}
+#tool-uploader {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--r-card) + 6px);
+  box-shadow: var(--shadow-card);
+  color: var(--text);
+}
+#tool-uploader h1 {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  text-transform: var(--display-case);
+  font-size: clamp(2rem, 4vw, 2.8rem);
+  line-height: 1.05;
+  color: var(--text);
+}
+#back-to-tools {
+  color: var(--accent);
+}
+#back-to-tools:hover {
+  color: var(--text);
+}
+#drop-zone {
+  background: var(--bg);
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--r-card);
+}
+#drop-zone:hover,
+#drop-zone.drag-over {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+#drop-zone i {
+  color: var(--accent);
+}
+
+/* Primary action */
+.btn-gradient,
+#alert-ok {
+  background: var(--btn-bg);
+  background-image: none;
+  color: var(--btn-text);
+  border: 0;
+  border-radius: var(--r-btn);
+  font-weight: 600;
+  box-shadow: var(--btn-lip);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+}
+.btn-gradient:hover:not(:disabled),
+#alert-ok:hover {
+  background: var(--btn-bg-hover);
+  transform: translateY(-1px);
+}
+.btn-gradient:active:not(:disabled) {
+  transform: translateY(2px);
+}
+.btn-gradient:focus,
+.btn-gradient:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  box-shadow: var(--btn-lip);
+}
+
+/* Solid accent fills (file-mode toggles, add-file buttons) take the button colour,
+   so the accent stays for links, icons and focus. Delete and success keep theirs. */
+:is(.bg-indigo-500, .bg-indigo-600, .bg-indigo-700, .bg-blue-500, .bg-blue-600):not(.ph-keep) {
+  background-color: var(--btn-bg);
+  color: var(--btn-text);
+}
+:is(.bg-indigo-500, .bg-indigo-600, .bg-indigo-700, .bg-blue-500, .bg-blue-600) :is(.text-white, svg, i) {
+  color: var(--btn-text);
+}
+:is(.hover\:bg-indigo-700, .hover\:bg-indigo-600, .hover\:bg-blue-700):hover {
+  background-color: var(--btn-bg-hover);
+}
+
+/* Secondary buttons were grey blocks; now outlined. */
+button:is(.bg-gray-600, .bg-gray-700):not(:disabled) {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  border-radius: var(--r-btn);
+}
+button:is(.bg-gray-600, .bg-gray-700):hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+input[type='text'],
+input[type='number'],
+input[type='password'],
+input[type='email'],
+input[type='search'],
+select,
+textarea {
+  border-color: var(--line-strong);
+}
+input[type='checkbox'],
+input[type='radio'],
+input[type='range'] {
+  accent-color: var(--accent);
+}
+input[type='color'] {
+  border-color: var(--line-strong);
+}
+
+/* Fold-out panels (advanced settings, FAQs) */
+.faq-d {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  margin-bottom: 0.6rem;
+}
+.faq-d-q {
+  color: var(--text);
+  border-radius: var(--r-card);
+}
+.faq-d-q:hover {
+  background: var(--surface-2);
+}
+.faq-d[open] .faq-d-q {
+  color: var(--accent);
+}
+
+.pdf-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+}
+.pill {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.shortcut-key {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+/* Modals: the original backdrop classes no longer apply, which made them solid. */
+#loader-modal,
+#alert-modal,
+.fixed.inset-0[class*='bg-opacity'] {
+  background-color: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+#loader-modal > div,
+#alert-modal > div {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--r-card) + 4px);
+  box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.45);
+}
+#alert-title {
+  color: var(--text);
+  font-family: var(--font-display);
+}
+.solid-spinner {
+  background: conic-gradient(
+    color-mix(in srgb, var(--accent) 0%, transparent) 0deg,
+    color-mix(in srgb, var(--accent) 20%, transparent) 90deg,
+    color-mix(in srgb, var(--accent) 60%, transparent) 240deg,
+    var(--accent) 350deg
+  );
+}
+
+footer,
+[data-simple-footer] {
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+}
+footer a,
+[data-simple-footer] a {
+  color: var(--text-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation-duration: 0.01ms !important;
+  }
+  .tool-card:hover {
+    transform: none;
+  }
+}

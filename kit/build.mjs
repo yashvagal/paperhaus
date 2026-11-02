@@ -1,0 +1,775 @@
+#!/usr/bin/env node
+// Phase 0 kit build: brands BentoPDF, serves every engine from your own site,
+// and makes the output fit Cloudflare Pages' free plan.
+//
+// Cloudflare Pages build command:  node kit/build.mjs
+// Output directory:                dist
+//
+// Nothing in src/ is changed permanently: the temporary source patches, the Paperhaus
+// tools (kit/tools) and the copied logo are removed again when the build finishes,
+// so upstream merges stay clean.
+
+import { execFileSync, spawnSync } from 'node:child_process';
+import {
+  existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, rmSync,
+  readdirSync, statSync, openSync, readSync, closeSync, cpSync,
+} from 'node:fs';
+import { join, dirname, basename, extname, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const KIT = dirname(fileURLToPath(import.meta.url));
+const ROOT = dirname(KIT);
+const DIST = join(ROOT, 'dist');
+const CACHE = join(ROOT, 'node_modules', '.cache', 'phase0-kit');
+
+// Cloudflare Pages free plan: 25 MiB per file, 20,000 files, 100 header rules,
+// 2,000 characters per header value.
+const MAX_FILE_BYTES = 25 * 1024 * 1024;
+const PART_BYTES = 20 * 1024 * 1024;
+const MAX_FILES = 20000;
+
+// Extra engines the Paperhaus tools use, served from your own site like the rest.
+const OPENCV_PACKAGE = '@techstark/opencv-js@4.12.0-release.1';
+const OPENCV_URL = '/wasm/opencv-4.12.0/opencv.js';
+const SCAN_WORKER_URL = '/kit-tools/scan/scan-worker.js';
+
+const log = (msg) => console.log(`[phase0-kit] ${msg}`);
+// Errors are thrown (not process.exit) so every `finally` runs and the temporary
+// source changes are always put back, even when the build fails.
+class KitError extends Error {}
+const fail = (msg) => {
+  throw new KitError(msg);
+};
+process.on('uncaughtException', (err) => {
+  console.error(err instanceof KitError ? `\n[phase0-kit] ERROR: ${err.message}\n` : err);
+  process.exit(1);
+});
+
+// ---------------------------------------------------------------- settings
+
+function loadKitEnv() {
+  const env = {};
+  const text = readFileSync(join(KIT, 'kit.env'), 'utf8');
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq === -1) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (/^(['"]).*\1$/.test(value)) value = value.slice(1, -1);
+    env[key] = value;
+  }
+  // Cloudflare dashboard variables override kit.env, handy for quick tests.
+  for (const key of Object.keys(env)) {
+    if (process.env[`KIT_${key}`]) env[key] = process.env[`KIT_${key}`];
+  }
+  if (!env.BRAND_NAME) fail('BRAND_NAME is empty in kit/kit.env');
+  if (!env.SOURCE_URL || env.SOURCE_URL.includes('YOUR-GITHUB-USERNAME')) {
+    log('WARNING: SOURCE_URL in kit/kit.env is still the placeholder. Set it to your fork so the footer links to your source code.');
+  }
+  env.OCR_LANGUAGES = (env.OCR_LANGUAGES || 'eng')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  return env;
+}
+
+// ---------------------------------------------------------------- versions
+
+function readVersions() {
+  const cdn = readFileSync(join(ROOT, 'src/js/const/cdn-version.ts'), 'utf8');
+  const pick = (re, src, what) => {
+    const m = src.match(re);
+    if (!m) fail(`Could not read the ${what} version from BentoPDF's source. Upstream may have moved it; check kit/build.mjs readVersions().`);
+    return m[1];
+  };
+  const provider = readFileSync(join(ROOT, 'src/js/utils/wasm-provider.ts'), 'utf8');
+  const lock = JSON.parse(readFileSync(join(ROOT, 'package-lock.json'), 'utf8'));
+  const lockVersion = (name) => {
+    const v = lock.packages?.[`node_modules/${name}`]?.version;
+    if (!v) fail(`Could not find ${name} in package-lock.json`);
+    return v;
+  };
+  return {
+    pymupdf: pick(/pymupdf:\s*'([^']+)'/, cdn, 'PyMuPDF'),
+    ghostscript: pick(/ghostscript:\s*'([^']+)'/, cdn, 'Ghostscript'),
+    cpdf: pick(/coherentpdf@([0-9][^/'"]*)/, provider, 'CoherentPDF'),
+    tesseract: lockVersion('tesseract.js'),
+    tesseractCore: lockVersion('tesseract.js-core'),
+  };
+}
+
+// ---------------------------------------------------------------- helpers
+
+function run(cmd, args, opts = {}) {
+  const res = spawnSync(cmd, args, { stdio: 'inherit', cwd: ROOT, ...opts });
+  if (res.status !== 0) fail(`${cmd} ${args.join(' ')} exited with code ${res.status}`);
+}
+
+function npmPack(spec) {
+  mkdirSync(join(CACHE, 'tgz'), { recursive: true });
+  const safe = spec.replace(/[@/]/g, '_');
+  const marker = join(CACHE, 'tgz', `${safe}.name`);
+  if (existsSync(marker)) {
+    const file = join(CACHE, 'tgz', readFileSync(marker, 'utf8').trim());
+    if (existsSync(file)) return file;
+  }
+  const out = execFileSync('npm', ['pack', spec, '--pack-destination', join(CACHE, 'tgz'), '--json', '--silent'], {
+    cwd: CACHE, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  const name = JSON.parse(out)[0].filename.replace(/^@/, '').replace(/\//g, '-');
+  writeFileSync(marker, name);
+  return join(CACHE, 'tgz', name);
+}
+
+function extract(tgz) {
+  const dir = join(CACHE, 'x', basename(tgz, '.tgz'));
+  if (!existsSync(join(dir, 'package'))) {
+    mkdirSync(dir, { recursive: true });
+    execFileSync('tar', ['-xzf', tgz, '-C', dir]);
+  }
+  return join(dir, 'package');
+}
+
+function download(url, dest) {
+  if (existsSync(dest) && statSync(dest).size > 0) return;
+  mkdirSync(dirname(dest), { recursive: true });
+  const res = spawnSync('curl', ['-fsSL', '--retry', '3', '-o', dest, url], { stdio: 'inherit' });
+  if (res.status !== 0) {
+    rmSync(dest, { force: true });
+    fail(`Download failed: ${url}`);
+  }
+}
+
+function walk(dir, out = []) {
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    const s = statSync(p);
+    if (s.isDirectory()) walk(p, out); else out.push({ path: p, size: s.size });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- engines
+
+// Paths are versioned so browsers can cache them forever and an upgrade
+// never serves a stale file.
+function engineUrls(v) {
+  return {
+    pymupdf: `/wasm/pymupdf-${v.pymupdf}/`,
+    gs: `/wasm/gs-${v.ghostscript}/`,
+    cpdf: `/wasm/cpdf-${v.cpdf}/`,
+    ocr: `/wasm/ocr-${v.tesseract}`,
+  };
+}
+
+function fetchEngines(v, env, urls) {
+  log('Fetching engines from the npm registry (cached after the first build)...');
+  const target = (p) => join(DIST, p.replace(/^\//, ''));
+  installKitToolAssets(target);
+
+  cpSync(extract(npmPack(`@bentopdf/pymupdf-wasm@${v.pymupdf}`)), target(urls.pymupdf), { recursive: true });
+
+  const gs = extract(npmPack(`@bentopdf/gs-wasm@${v.ghostscript}`));
+  cpSync(existsSync(join(gs, 'assets')) ? join(gs, 'assets') : gs, target(urls.gs), { recursive: true });
+
+  const cpdf = extract(npmPack(`coherentpdf@${v.cpdf}`));
+  cpSync(existsSync(join(cpdf, 'dist')) ? join(cpdf, 'dist') : cpdf, target(urls.cpdf), { recursive: true });
+
+  const ocr = target(urls.ocr);
+  mkdirSync(join(ocr, 'lang-data'), { recursive: true });
+  copyFileSync(join(extract(npmPack(`tesseract.js@${v.tesseract}`)), 'dist', 'worker.min.js'), join(ocr, 'worker.min.js'));
+  cpSync(extract(npmPack(`tesseract.js-core@${v.tesseractCore}`)), join(ocr, 'core'), { recursive: true });
+
+  for (const lang of env.OCR_LANGUAGES) {
+    const pkg = extract(npmPack(`@tesseract.js-data/${lang}@1.0.0`));
+    const file = join(pkg, '4.0.0_best_int', `${lang}.traineddata.gz`);
+    if (!existsSync(file)) fail(`OCR language "${lang}" not found. Check OCR_LANGUAGES in kit/kit.env.`);
+    copyFileSync(file, join(ocr, 'lang-data', `${lang}.traineddata.gz`));
+  }
+
+  // OCR text-layer fonts: same selection logic as BentoPDF's offline-bundle script,
+  // fetched from GitHub (the githack links in BentoPDF mirror GitHub raw files).
+  const mapping = readFileSync(join(ROOT, 'src/js/config/font-mappings.ts'), 'utf8');
+  const [langSection, fontSection = ''] = mapping.split('export const fontFamilyToUrl');
+  const langToFamily = {};
+  for (const m of langSection.matchAll(/^\s*([a-z_]+):\s*'([^']+)',/gm)) langToFamily[m[1]] = m[2];
+  const familyToUrl = {};
+  for (const m of fontSection.matchAll(/^\s*'([^']+)':\s*\n?\s*'([^']+)',/gm)) familyToUrl[m[1]] = m[2];
+  const families = new Set(['Noto Sans', ...env.OCR_LANGUAGES.map((l) => langToFamily[l] || 'Noto Sans')]);
+  for (const family of families) {
+    const url = familyToUrl[family] || familyToUrl['Noto Sans'];
+    if (!url) fail(`No font URL found for ${family} in font-mappings.ts`);
+    const githubUrl = url.replace('https://rawcdn.githack.com/', 'https://raw.githubusercontent.com/');
+    const cached = join(CACHE, 'fonts', basename(url));
+    download(githubUrl, cached);
+    mkdirSync(join(ocr, 'fonts'), { recursive: true });
+    copyFileSync(cached, join(ocr, 'fonts', basename(url)));
+  }
+  log(`Engines ready: PyMuPDF ${v.pymupdf}, Ghostscript ${v.ghostscript}, CoherentPDF ${v.cpdf}, Tesseract ${v.tesseract}, OCR: ${env.OCR_LANGUAGES.join(', ')}`);
+}
+
+// ---------------------------------------------------------------- source patch
+
+// LibreOffice's engine files are 28 MB and 48 MB, over Cloudflare Pages' 25 MiB
+// per-file cap. They are split into parts after the build, and this patch teaches
+// the loader to reassemble them. Reverted after the build.
+const LOADER = join(ROOT, 'src/js/utils/libreoffice-loader.ts');
+// The fetch at the start of fetchAsDecompressedUrl(), from the request up to reading the
+// body. Matched loosely, so wording changes in BentoPDF's error message don't break it.
+const LOADER_ANCHOR = /  const response = await fetch\(url\);\n[\s\S]{0,600}?\n  let blob = await response\.blob\(\);/;
+const LOADER_REPLACEMENT = `  // [phase0-kit] reassemble files split to fit Cloudflare Pages' 25 MiB limit
+  let blob: Blob;
+  let manifest: { parts: string[] } | null = null;
+  try {
+    const m = await fetch(\`\${url}.parts.json\`);
+    if (m.ok) manifest = await m.json();
+  } catch {
+    manifest = null;
+  }
+  if (manifest && Array.isArray(manifest.parts) && manifest.parts.length) {
+    const base = url.slice(0, url.lastIndexOf('/') + 1);
+    const pieces = await Promise.all(
+      manifest.parts.map(async (name) => {
+        const r = await fetch(base + name);
+        if (!r.ok) throw new Error(\`Failed to fetch \${base + name}: HTTP \${r.status}\`);
+        return r.blob();
+      })
+    );
+    blob = new Blob(pieces);
+  } else {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(\`Failed to fetch \${url}: HTTP \${response.status}\`);
+    }
+    blob = await response.blob();
+  }`;
+
+function patchLoader() {
+  const src = readFileSync(LOADER, 'utf8');
+  if (src.includes('[phase0-kit]')) return src; // already patched (interrupted earlier run)
+  if (!LOADER_ANCHOR.test(src)) {
+    fail('BentoPDF changed src/js/utils/libreoffice-loader.ts, so the kit cannot patch it. Office conversion needs that patch on Cloudflare Pages. Update LOADER_ANCHOR in kit/build.mjs to match the new code.');
+  }
+  writeFileSync(LOADER, src.replace(LOADER_ANCHOR, () => LOADER_REPLACEMENT));
+  log('Patched the LibreOffice loader to reassemble split files (temporary).');
+  return src;
+}
+
+// ---------------------------------------------------------------- Paperhaus tools
+// Tools that are not part of BentoPDF live in kit/tools/<tool>/. For the build they are
+// copied into BentoPDF's source tree and listed in its tool registry, then removed.
+
+const SCAN_TOOL = {
+  dir: join(KIT, 'tools', 'scan'),
+  page: 'scan-document',
+  files: [
+    ['scan-document.html', 'src/pages/scan-document.html'],
+    ['scan-page.ts', 'src/js/logic/kit-scan/scan-page.ts'],
+    ['scan.css', 'src/js/logic/kit-scan/scan.css'],
+  ],
+  // Added to the home page: first in Popular Tools, plus a category of its own.
+  popular: `      {
+        href: import.meta.env.BASE_URL + 'scan-document.html',
+        name: 'Scan to PDF',
+        icon: 'ph-scan',
+        subtitle: 'Scan pages with your camera. Auto crop, shadow removal and searchable text.',
+      },
+`,
+  category: `  {
+    name: 'Scan',
+    tools: [
+      {
+        href: import.meta.env.BASE_URL + 'scan-document.html',
+        name: 'Scan to PDF',
+        icon: 'ph-scan',
+        subtitle: 'Scan documents, receipts and notes with your camera, or from photos.',
+      },
+      {
+        href: import.meta.env.BASE_URL + 'scan-document.html?mode=id',
+        name: 'Scan ID Card',
+        icon: 'ph-identification-card',
+        subtitle: 'Front and back on one page at real card size, ready to print.',
+      },
+      {
+        href: import.meta.env.BASE_URL + 'scan-document.html?mode=book',
+        name: 'Scan a Book',
+        icon: 'ph-book-open',
+        subtitle: 'Photograph two facing pages and get them as two PDF pages.',
+      },
+      {
+        href: import.meta.env.BASE_URL + 'scan-document.html?mode=qr',
+        name: 'Scan QR Code',
+        icon: 'ph-qr-code',
+        subtitle: 'Read a QR code with your camera or from a picture.',
+      },
+    ],
+  },
+`,
+};
+
+const VITE_CONFIG = join(ROOT, 'vite.config.ts');
+const TOOLS_CONFIG = join(ROOT, 'src/js/config/tools.ts');
+const VITE_ANCHOR = '          // Tool Pages\n';
+const POPULAR_ANCHOR = "    name: 'Popular Tools',\n    tools: [\n";
+const CATEGORY_ANCHOR = "  {\n    name: 'Edit & Annotate',";
+
+function installKitTools() {
+  const vite = readFileSync(VITE_CONFIG, 'utf8');
+  const tools = readFileSync(TOOLS_CONFIG, 'utf8');
+  const undo = () => {
+    writeFileSync(VITE_CONFIG, vite);
+    writeFileSync(TOOLS_CONFIG, tools);
+    for (const [, dest] of SCAN_TOOL.files) rmSync(join(ROOT, dest), { force: true });
+    rmSync(join(ROOT, 'src/js/logic/kit-scan'), { recursive: true, force: true });
+  };
+  if (vite.includes('[phase0-kit]') || tools.includes('[phase0-kit]')) {
+    fail('vite.config.ts or tools.ts still holds changes from an interrupted build. Restore them with: git checkout -- vite.config.ts src/js/config/tools.ts');
+  }
+  for (const [anchor, src, what] of [
+    [VITE_ANCHOR, vite, 'vite.config.ts'],
+    [POPULAR_ANCHOR, tools, 'src/js/config/tools.ts'],
+    [CATEGORY_ANCHOR, tools, 'src/js/config/tools.ts'],
+  ]) {
+    if (!src.includes(anchor)) fail(`BentoPDF changed ${what}, so the kit cannot add the Scan tool. Update the anchors in kit/build.mjs (installKitTools).`);
+  }
+  if (existsSync(join(ROOT, 'src/pages', `${SCAN_TOOL.page}.html`))) {
+    fail(`BentoPDF now has its own src/pages/${SCAN_TOOL.page}.html. Rename the kit's Scan page in kit/build.mjs.`);
+  }
+
+  for (const [from, dest] of SCAN_TOOL.files) {
+    mkdirSync(dirname(join(ROOT, dest)), { recursive: true });
+    copyFileSync(join(SCAN_TOOL.dir, from), join(ROOT, dest));
+  }
+  writeFileSync(VITE_CONFIG, vite.replace(VITE_ANCHOR,
+    `${VITE_ANCHOR}          // [phase0-kit] Paperhaus tools (temporary)\n` +
+    `          '${SCAN_TOOL.page}': resolve(__dirname, 'src/pages/${SCAN_TOOL.page}.html'),\n`));
+  writeFileSync(TOOLS_CONFIG, tools
+    .replace(POPULAR_ANCHOR, `${POPULAR_ANCHOR}      // [phase0-kit]\n${SCAN_TOOL.popular}`)
+    .replace(CATEGORY_ANCHOR, `  // [phase0-kit]\n${SCAN_TOOL.category}${CATEGORY_ANCHOR}`));
+  log('Added the Scan tool (temporary).');
+  return undo;
+}
+
+function installKitToolAssets(target) {
+  const worker = join(DIST, SCAN_WORKER_URL.replace(/^\//, ''));
+  mkdirSync(dirname(worker), { recursive: true });
+  copyFileSync(join(SCAN_TOOL.dir, 'scan-worker.js'), worker);
+  const cv = extract(npmPack(OPENCV_PACKAGE));
+  const cvDir = target(dirname(OPENCV_URL));
+  mkdirSync(cvDir, { recursive: true });
+  copyFileSync(join(cv, 'dist', 'opencv.js'), join(cvDir, 'opencv.js'));
+  copyFileSync(join(cv, 'LICENSE'), join(cvDir, 'LICENSE'));
+}
+
+// ---------------------------------------------------------------- post-build
+
+function splitLargeFiles() {
+  for (const { path, size } of walk(DIST)) {
+    if (size <= MAX_FILE_BYTES) continue;
+    const name = basename(path);
+    const parts = [];
+    const fd = openSync(path, 'r');
+    try {
+      const buf = Buffer.alloc(PART_BYTES);
+      for (let i = 0, offset = 0; offset < size; i++, offset += PART_BYTES) {
+        const n = readSync(fd, buf, 0, PART_BYTES, offset);
+        const partName = `${name}.part${i}.gz`;
+        writeFileSync(join(dirname(path), partName), buf.subarray(0, n));
+        parts.push(partName);
+      }
+    } finally {
+      closeSync(fd);
+    }
+    writeFileSync(`${path}.parts.json`, JSON.stringify({ parts, bytes: size }));
+    rmSync(path);
+    log(`Split ${relative(DIST, path)} (${(size / 1048576).toFixed(1)} MB) into ${parts.length} parts.`);
+  }
+}
+
+function writeHeaders() {
+  const csp = [
+    "default-src 'self'",
+    "script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval' blob:",
+    "worker-src 'self' blob:",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self' blob: data:",
+    "media-src 'self' blob: data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-src 'self' blob:",
+    "frame-ancestors 'self'",
+    "form-action 'self'",
+  ].join('; ');
+
+  const rules = [
+    ['/*', {
+      'Content-Security-Policy': csp,
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'credentialless',
+      'Cross-Origin-Resource-Policy': 'same-origin',
+      'X-Frame-Options': 'SAMEORIGIN',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
+      // camera=(self): the Scan tool uses the camera, on this site only.
+      'Permissions-Policy': 'geolocation=(), camera=(self), microphone=(), payment=(), usb=(), interest-cohort=()',
+      'X-Robots-Tag': 'noindex, nofollow',
+    }],
+    ['/wasm/*', { 'Cache-Control': 'public, max-age=31536000, immutable' }],
+    ['/assets/*', { 'Cache-Control': 'public, max-age=31536000, immutable' }],
+    ['/libreoffice-wasm/*', { 'Cache-Control': 'public, max-age=604800' }],
+    ['/sw.js', { 'Cache-Control': 'no-cache' }],
+  ];
+
+  let text = '# Generated by kit/build.mjs. Edit there, not here.\n';
+  for (const [path, headers] of rules) {
+    text += `${path}\n`;
+    for (const [k, v] of Object.entries(headers)) {
+      if (v.length > 2000) fail(`Header ${k} is over Cloudflare's 2,000-character limit.`);
+      text += `  ${k}: ${v}\n`;
+    }
+    text += '\n';
+  }
+  writeFileSync(join(DIST, '_headers'), text);
+  writeFileSync(join(DIST, 'robots.txt'), 'User-agent: *\nDisallow: /\n');
+}
+
+// The Paperhaus look. kit/theme/base.css is the shared engine; each direction in
+// kit/theme/<name>/ adds theme.css (tokens and signature touches) and logo.svg.
+// The two are joined into one stylesheet and linked into every page after
+// BentoPDF's own styles. Embedded viewers and engines are left alone.
+const THEME_SKIP = new Set(['wasm', 'libreoffice-wasm', 'pdfjs-viewer', 'pdfjs-annotation-viewer', 'kit-theme']);
+const THEME_MARK = 'data-paperhaus-theme';
+const DEFAULT_THEME = 'soft';
+
+function themeName(env) {
+  return (env.THEME || DEFAULT_THEME).trim();
+}
+
+// The logo: BRAND_LOGO if set, otherwise the current direction's mark.
+function resolveLogo(env) {
+  if (env.BRAND_LOGO) {
+    const custom = join(ROOT, env.BRAND_LOGO);
+    if (!existsSync(custom)) fail(`Logo not found: ${env.BRAND_LOGO}`);
+    return custom;
+  }
+  return join(BRAND, 'paperhaus-mark.svg');
+}
+
+// The Paperhaus brand kit: logo mark, favicon, app icon and wordmark files.
+const BRAND = join(KIT, 'brand');
+
+// Logo in the header and footer, browser-tab icon, and the pinned-app icons.
+function brandAssets(env, bg) {
+  if (!existsSync(join(DIST, 'images'))) return;
+  const logo = resolveLogo(env);
+  if (extname(logo) === '.svg') copyFileSync(logo, join(DIST, 'images', 'brand-logo.svg'));
+  // A custom BRAND_LOGO also becomes the tab icon; otherwise the brand favicon is used.
+  copyFileSync(env.BRAND_LOGO && extname(logo) === '.svg' ? logo : join(BRAND, 'paperhaus-favicon.svg'), join(DIST, 'images', 'favicon.svg'));
+  brandWebApp(env, bg);
+}
+
+const escapeHtml = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// *word* in kit.env copy becomes the italic accent word.
+const withEm = (t) => escapeHtml(t).replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+function rewriteHomeHeader(env) {
+  const file = join(DIST, 'index.html');
+  if (!existsSync(file)) return;
+  const html = readFileSync(file, 'utf8');
+  // First run: BentoPDF's header holds only a heading and a paragraph. Later runs
+  // (--theme-only) replace the block between the Paperhaus markers instead.
+  const marked = /<!--ph-header-->[\s\S]*?<!--\/ph-header-->/;
+  const original = /(<div id="tools-header"[^>]*>)([\s\S]*?)(<\/div>)/;
+  if (!marked.test(html) && !original.test(html)) {
+    log('WARNING: could not find the home page header; leaving BentoPDF\'s heading in place.');
+    return;
+  }
+  const eyebrow = escapeHtml((env.BRAND_NAME || 'paperhaus').toLowerCase());
+  const title = withEm(env.HOME_TITLE || 'your files stay *yours.*');
+  const lede = withEm(env.HOME_SUBTITLE || 'Merge, split, sign, convert and more. Every tool runs right in your browser.');
+  const note = escapeHtml(env.HOME_NOTE || 'Nothing is uploaded or stored');
+  // Divs, not paragraphs: BentoPDF's script rewrites the first <p> in this header.
+  const inner = '<!--ph-header-->' +
+    `<div class="ph-eyebrow">${eyebrow}</div><h1 class="ph-title">${title}</h1>` +
+    `<div class="ph-lede">${lede}</div>` + (note ? `<div class="ph-note">${note}</div>` : '') +
+    '<!--/ph-header-->';
+  // Function replacements, so a $ in the copy is never read as a pattern.
+  const out = marked.test(html) ? html.replace(marked, () => inner) : html.replace(original, (m, open, body, close) => open + inner + close);
+  writeFileSync(file, out);
+}
+
+function applyTheme(env) {
+  const name = themeName(env);
+  if (name === 'none') {
+    log('THEME=none: keeping BentoPDF\'s default look.');
+    brandAssets(env, '#fbf1e4');
+    return;
+  }
+  const dir = join(KIT, 'theme', name);
+  if (!existsSync(join(dir, 'theme.css'))) {
+    const options = readdirSync(join(KIT, 'theme')).filter((d) => existsSync(join(KIT, 'theme', d, 'theme.css')));
+    fail(`Theme "${name}" not found. Options: ${options.join(', ')}, or none.`);
+  }
+  const css = readFileSync(join(KIT, 'theme', 'base.css'), 'utf8') + '\n' + readFileSync(join(dir, 'theme.css'), 'utf8');
+
+  const out = join(DIST, 'kit-theme');
+  rmSync(out, { recursive: true, force: true });
+  mkdirSync(out, { recursive: true });
+  cpSync(join(KIT, 'theme', 'fonts'), join(out, 'fonts'), { recursive: true });
+  writeFileSync(join(out, 'paperhaus.css'), css);
+
+  // Browser chrome colour: the direction's light and dark backgrounds.
+  const bgs = [...css.matchAll(/--bg:\s*(#[0-9a-fA-F]{3,8})/g)].map((m) => m[1]);
+  const light = bgs.at(-2) || bgs.at(0) || '#ffffff';
+  const dark = bgs.at(-1) || light;
+
+  // Cache-bust with a content hash so a restyle shows up immediately.
+  let hash = 0;
+  for (let i = 0; i < css.length; i++) hash = (hash * 31 + css.charCodeAt(i)) >>> 0;
+  const tags = `<link rel="stylesheet" href="/kit-theme/paperhaus.css?v=${hash.toString(36)}" ${THEME_MARK}>` +
+    `<meta name="theme-color" media="(prefers-color-scheme: light)" content="${light}" ${THEME_MARK}>` +
+    `<meta name="theme-color" media="(prefers-color-scheme: dark)" content="${dark}" ${THEME_MARK}>`;
+  const strip = new RegExp(`<(?:link|meta)[^>]*${THEME_MARK}[^>]*>`, 'g');
+
+  let pages = 0;
+  const visit = (d) => {
+    for (const entry of readdirSync(d)) {
+      const p = join(d, entry);
+      if (statSync(p).isDirectory()) {
+        if (!THEME_SKIP.has(entry)) visit(p);
+      } else if (entry.endsWith('.html')) {
+        const html = readFileSync(p, 'utf8');
+        if (!html.includes('</head>')) continue;
+        writeFileSync(p, brandTitles(html.replace(strip, ''), env.BRAND_NAME).replace('</head>', `${tags}</head>`));
+        pages++;
+      }
+    }
+  };
+  visit(DIST);
+  rewriteHomeHeader(env);
+
+  brandAssets(env, light);
+  log(`Applied the "${name}" design to ${pages} pages.`);
+}
+
+// ---------------------------------------------------------------- pinning
+// Paperhaus is pinned from the browser like an app (no app store). Every page gets the
+// web app manifest (fetched with the sign-in cookie, so Cloudflare Access lets it through),
+// the iPhone home screen tags, and the Pin button and account chip from kit/tools/pin/.
+const PIN_MARK = 'data-paperhaus-pin';
+
+function addPinning(env) {
+  const out = join(DIST, 'kit-tools', 'pin');
+  mkdirSync(out, { recursive: true });
+  let hash = 0;
+  for (const f of ['pin.js', 'pin.css']) {
+    const text = readFileSync(join(KIT, 'tools', 'pin', f), 'utf8');
+    for (let i = 0; i < text.length; i++) hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
+    writeFileSync(join(out, f), text);
+  }
+  const v = hash.toString(36);
+  const brand = escapeHtml(env.BRAND_NAME);
+  // The public Paperhaus website, linked from the account menu. Only http(s) addresses.
+  const siteUrl = /^https?:\/\/[^\s"<>]+$/i.test(env.SITE_URL || '') ? env.SITE_URL.replace(/\/+$/, '') : '';
+  const tags =
+    `<link rel="manifest" href="/site.webmanifest" crossorigin="use-credentials" ${PIN_MARK}>` +
+    `<link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png" ${PIN_MARK}>` +
+    `<meta name="mobile-web-app-capable" content="yes" ${PIN_MARK}>` +
+    `<meta name="apple-mobile-web-app-capable" content="yes" ${PIN_MARK}>` +
+    `<meta name="apple-mobile-web-app-title" content="${brand}" ${PIN_MARK}>` +
+    `<meta name="apple-mobile-web-app-status-bar-style" content="default" ${PIN_MARK}>` +
+    (siteUrl ? `<meta name="paperhaus-site" content="${escapeHtml(siteUrl)}" ${PIN_MARK}>` : '') +
+    `<link rel="stylesheet" href="/kit-tools/pin/pin.css?v=${v}" ${PIN_MARK}>` +
+    `<script src="/kit-tools/pin/pin.js?v=${v}" defer ${PIN_MARK}></script>`;
+  // BentoPDF's own versions of these tags, and ours from an earlier run, are replaced.
+  const strip = [
+    new RegExp(`<script[^>]*${PIN_MARK}[^>]*></script>`, 'g'),
+    new RegExp(`<(?:link|meta)[^>]*${PIN_MARK}[^>]*>`, 'g'),
+    /<link\s+rel="(?:manifest|apple-touch-icon)"[^>]*>/g,
+    /<meta\s+name="(?:apple-)?mobile-web-app-(?:capable|title|status-bar-style)"[^>]*>/g,
+  ];
+  let pages = 0;
+  const visit = (d) => {
+    for (const entry of readdirSync(d)) {
+      const p = join(d, entry);
+      if (statSync(p).isDirectory()) {
+        if (!THEME_SKIP.has(entry) && entry !== 'kit-tools') visit(p);
+      } else if (entry.endsWith('.html')) {
+        let html = readFileSync(p, 'utf8');
+        if (!html.includes('</head>')) continue;
+        for (const re of strip) html = html.replace(re, '');
+        writeFileSync(p, html.replace('</head>', `${tags}</head>`));
+        pages++;
+      }
+    }
+  };
+  visit(DIST);
+  log(`Added pinning and the account chip to ${pages} pages.`);
+}
+
+// Browser tab titles and share previews say your brand instead of BentoPDF.
+// (The footer keeps the BentoPDF credit and source link, as AGPL-3.0 asks.)
+function brandTitles(html, brand) {
+  const swap = (text) => text.replace(/BentoPDF/g, brand);
+  return html
+    .replace(/<title>[\s\S]*?<\/title>/, swap)
+    .replace(/<meta\s+(?:name|property)="(?:title|og:title|og:site_name|twitter:title|apple-mobile-web-app-title)"\s+content="[^"]*"/g, swap);
+}
+
+// The installable app (Add to Home Screen): Paperhaus name, the design's icons, and a
+// Scan shortcut on the app icon. Icons come from kit/brand/icons/.
+function brandWebApp(env, bg) {
+  const icons = join(BRAND, 'icons');
+  if (existsSync(icons) && existsSync(join(DIST, 'images'))) {
+    for (const f of ['favicon-192x192.png', 'favicon-512x512.png', 'maskable-512x512.png', 'apple-touch-icon.png']) {
+      copyFileSync(join(icons, f), join(DIST, 'images', f));
+    }
+    copyFileSync(join(icons, 'favicon.ico'), join(DIST, 'favicon.ico'));
+  }
+  const file = join(DIST, 'site.webmanifest');
+  let manifest = {};
+  try {
+    manifest = JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    /* write a fresh one */
+  }
+  Object.assign(manifest, {
+    id: '/',
+    name: env.BRAND_NAME,
+    short_name: env.BRAND_NAME,
+    description: 'Private document tools that run in your browser. Nothing is uploaded or stored.',
+    start_url: '/',
+    scope: '/',
+    display: 'standalone',
+    // Opening the pinned app again brings back the window you already have.
+    launch_handler: { client_mode: ['focus-existing', 'auto'] },
+    background_color: bg,
+    theme_color: bg,
+    icons: [
+      { src: '/images/favicon-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/images/favicon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: '/images/maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      { src: '/images/apple-touch-icon.png', sizes: '180x180', type: 'image/png', purpose: 'any' },
+    ],
+    // Press and hold (phone) or right-click (computer) the pinned icon for these.
+    shortcuts: [
+      ['Scan to PDF', 'Scan', '/scan-document'],
+      ['Merge PDF', 'Merge', '/merge-pdf'],
+      ['Compress PDF', 'Compress', '/compress-pdf'],
+      ['Sign PDF', 'Sign', '/sign-pdf'],
+    ].map(([name, short_name, url]) => ({
+      name,
+      short_name,
+      url,
+      icons: [{ src: '/images/favicon-192x192.png', sizes: '192x192', type: 'image/png' }],
+    })),
+  });
+  delete manifest.orientation;
+  writeFileSync(file, JSON.stringify(manifest, null, 2) + '\n');
+}
+
+function verify(urls) {
+  const files = walk(DIST);
+  const tooBig = files.filter((f) => f.size > MAX_FILE_BYTES);
+  if (tooBig.length) fail(`Files over 25 MiB remain: ${tooBig.map((f) => relative(DIST, f.path)).join(', ')}`);
+  if (files.length > MAX_FILES) fail(`${files.length} files is over Cloudflare Pages' ${MAX_FILES}-file limit.`);
+  for (const p of [`${urls.pymupdf}`, `${urls.gs}`, `${urls.cpdf}coherentpdf.browser.min.js`, `${urls.ocr}/worker.min.js`]) {
+    if (!existsSync(join(DIST, p.replace(/^\//, '')))) fail(`Expected engine file missing: ${p}`);
+  }
+  const total = files.reduce((a, f) => a + f.size, 0);
+  log(`Checks passed: ${files.length} files, ${(total / 1048576).toFixed(0)} MB, largest ${(Math.max(...files.map((f) => f.size)) / 1048576).toFixed(1)} MB.`);
+}
+
+// BentoPDF's own build regenerates a few tracked files (blog pages, a partial,
+// a header config). Put back any it changed, so a local build leaves nothing
+// to commit. Files you had already edited are left alone.
+function modifiedTrackedFiles() {
+  const res = spawnSync('git', ['status', '--porcelain', '--untracked-files=no'], { cwd: ROOT, encoding: 'utf8' });
+  if (res.status !== 0) return null;
+  return new Set(res.stdout.split('\n').filter(Boolean).map((l) => l.slice(3)));
+}
+
+function restoreBuildByproducts(before) {
+  const after = modifiedTrackedFiles();
+  if (!before || !after) return;
+  const changed = [...after].filter((f) => !before.has(f));
+  if (!changed.length) return;
+  spawnSync('git', ['checkout', '--', ...changed], { cwd: ROOT });
+  log(`Restored ${changed.length} file(s) BentoPDF's build regenerated: ${changed.join(', ')}`);
+}
+
+// ---------------------------------------------------------------- main
+
+const env = loadKitEnv();
+
+// node kit/build.mjs --theme-only : restyle an existing dist/ in a few seconds,
+// handy while adjusting a design in kit/theme/<name>/theme.css.
+if (process.argv.includes('--theme-only')) {
+  if (!existsSync(DIST)) fail('No dist/ folder yet. Run a full build first: node kit/build.mjs');
+  applyTheme(env);
+  addPinning(env);
+  process.exit(0);
+}
+
+const versions = readVersions();
+const urls = engineUrls(versions);
+
+const logoSrc = resolveLogo(env);
+const logoPublicPath = `images/brand-logo${extname(logoSrc)}`;
+const logoDest = join(ROOT, 'public', logoPublicPath);
+const logoExisted = existsSync(logoDest);
+
+const footer = env.SOURCE_URL
+  ? `Built on BentoPDF (AGPL-3.0). Source code: ${env.SOURCE_URL}`
+  : 'Built on BentoPDF (AGPL-3.0).';
+
+const buildEnv = {
+  ...process.env,
+  SIMPLE_MODE: 'true',
+  COMPRESSION_MODE: 'o',
+  DISABLE_GITHUB_STARS: 'true',
+  DISABLE_TOOLS: env.DISABLE_TOOLS || '',
+  VITE_BRAND_NAME: env.BRAND_NAME,
+  VITE_BRAND_LOGO: logoPublicPath,
+  VITE_FOOTER_TEXT: footer,
+  VITE_DEFAULT_LANGUAGE: env.DEFAULT_LANGUAGE || 'en',
+  VITE_WASM_PYMUPDF_URL: urls.pymupdf,
+  VITE_WASM_GS_URL: urls.gs,
+  VITE_WASM_CPDF_URL: urls.cpdf,
+  VITE_TESSERACT_WORKER_URL: `${urls.ocr}/worker.min.js`,
+  VITE_TESSERACT_CORE_URL: `${urls.ocr}/core`,
+  VITE_TESSERACT_LANG_URL: `${urls.ocr}/lang-data`,
+  VITE_TESSERACT_AVAILABLE_LANGUAGES: env.OCR_LANGUAGES.join(','),
+  VITE_OCR_FONT_BASE_URL: `${urls.ocr}/fonts`,
+  VITE_CORS_PROXY_URL: '',
+  VITE_OPENCV_URL: OPENCV_URL,
+  VITE_SCAN_WORKER_URL: SCAN_WORKER_URL,
+};
+
+log(`Building "${env.BRAND_NAME}" on BentoPDF ${JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version}`);
+const trackedBefore = modifiedTrackedFiles();
+let originalLoader = null;
+let removeKitTools = () => {};
+try {
+  originalLoader = patchLoader();
+  removeKitTools = installKitTools();
+  copyFileSync(logoSrc, logoDest);
+  rmSync(DIST, { recursive: true, force: true });
+  run('npm', ['run', 'build'], { env: buildEnv });
+} finally {
+  if (originalLoader !== null) writeFileSync(LOADER, originalLoader);
+  removeKitTools();
+  if (!logoExisted) rmSync(logoDest, { force: true });
+  log('Reverted temporary source changes.');
+  restoreBuildByproducts(trackedBefore);
+}
+
+fetchEngines(versions, env, urls);
+splitLargeFiles();
+applyTheme(env);
+addPinning(env);
+writeHeaders();
+verify(urls);
+log('Done. Deploy the dist/ folder.');

@@ -1,0 +1,358 @@
+/* Soft: cream and pastel orange, pillowy and calm.
+ * Modelled on soft mobile app design: a cream ground with a faint peach glow, white
+ * cards with big radii and warm diffused shadows instead of borders, Poppins throughout,
+ * pastel circle icons (a different tint per tool category), pill buttons with a peach
+ * gradient, and a home header drawn as a sunset card with rolling apricot hills.
+ * After dark the same scene turns to dusk.
+ * Colours follow the brand kit (kit/brand): ink #3A2A1F, cream #FBF1E4, orange #F7A86E,
+ * light peach #FCD2B0. The deeper #B35A22 is kept for text links, where the brand
+ * orange would be too faint to read.
+ */
+:root,
+:host {
+  --bg: #fbf1e4;
+  --surface: #ffffff;
+  --surface-2: #f8ecdc;
+  --line: #f0e1cd;
+  --line-strong: #e6d1b6;
+  --text: #3a2a1f;
+  --text-2: #6b5646;
+  --muted: #937d69;
+  --accent: #b35a22;
+  --accent-hover: #934514;
+  --accent-soft: #fde4cf;
+  --on-accent: #3a2a1f;
+  --btn-bg: #f7a86e;
+  --btn-bg-hover: #f39a5a;
+  --btn-text: #3a2a1f;
+  --btn-grad: linear-gradient(135deg, #fcc59b 0%, #f7a86e 100%);
+  --btn-grad-hover: linear-gradient(135deg, #fab889 0%, #f39a5a 100%);
+  --btn-glow: 0 12px 22px -12px rgba(235, 135, 70, 0.75);
+  --good: #2f7a52;
+  --good-soft: #dff1e5;
+  --bad: #b23b2c;
+  --bad-soft: #fde4df;
+  --warn: #8f5e0a;
+  --warn-soft: #fcefd4;
+
+  /* category tints (circle) and their icon colours */
+  --c1: #fde2cf; --i1: #b9582a;
+  --c2: #fdd9b4; --i2: #a96413;
+  --c3: #fcd6cf; --i3: #b04a3c;
+  --c4: #fbeac2; --i4: #93680e;
+  --c5: #f9dbe0; --i5: #a64e5f;
+  --c6: #f3e3d2; --i6: #86603f;
+
+  /* the header scene */
+  --sky: linear-gradient(160deg, #fff7ee 0%, #fde5ce 48%, #fbcfa9 100%);
+  --sun: #fffaf3;
+  --sun-glow: rgba(255, 250, 243, 0.65);
+  --hill-1: #fcd2b0;
+  --hill-2: #f9bd90;
+  --hill-3: #f7a86e;
+
+  --glow-a: rgba(252, 210, 176, 0.55);
+  --glow-b: rgba(255, 236, 214, 0.7);
+
+  --font-body: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+  --font-em: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+  --display-weight: 600;
+  --display-tracking: -0.035em;
+  --display-case: none;
+  --r-card: 26px;
+  --r-input: 16px;
+  --shadow-card: 0 1px 2px rgba(150, 90, 50, 0.04), 0 16px 32px -20px rgba(196, 112, 62, 0.3);
+  --shadow-lift: 0 2px 4px rgba(150, 90, 50, 0.04), 0 28px 46px -24px rgba(204, 108, 58, 0.42);
+  --nav-bg: rgba(251, 241, 228, 0.85);
+}
+@media (prefers-color-scheme: dark) {
+  :root,
+  :host {
+    --bg: #1e1814;
+    --surface: #29211b;
+    --surface-2: #322820;
+    --line: #3b3027;
+    --line-strong: #4e4034;
+    --text: #fbf1e4;
+    --text-2: #d6c3af;
+    --muted: #a8927e;
+    --accent: #f7a86e;
+    --accent-hover: #fcd2b0;
+    --accent-soft: #43301f;
+    --on-accent: #1e1814;
+    --btn-bg: #f7a86e;
+    --btn-bg-hover: #fab889;
+    --btn-text: #2a1d14;
+    --btn-grad: linear-gradient(135deg, #fcc59b 0%, #f7a86e 100%);
+    --btn-grad-hover: linear-gradient(135deg, #fdd2b0 0%, #f9b47f 100%);
+    --btn-glow: 0 12px 24px -12px rgba(247, 168, 110, 0.45);
+    --good: #8fd0a6;
+    --good-soft: #1f3528;
+    --bad: #ff9f92;
+    --bad-soft: #3d201c;
+    --warn: #f3c47c;
+    --warn-soft: #3b2c15;
+
+    --c1: rgba(246, 184, 138, 0.16); --i1: #f8c39c;
+    --c2: rgba(246, 196, 130, 0.16); --i2: #f7cf98;
+    --c3: rgba(244, 163, 154, 0.16); --i3: #f6b0a7;
+    --c4: rgba(246, 214, 138, 0.15); --i4: #f5d99a;
+    --c5: rgba(240, 170, 184, 0.15); --i5: #f2b9c4;
+    --c6: rgba(226, 196, 166, 0.15); --i6: #e6cbb0;
+
+    --sky: linear-gradient(160deg, #3a2b22 0%, #5a3a29 52%, #80503a 100%);
+    --sun: #fcd2b0;
+    --sun-glow: rgba(251, 208, 170, 0.35);
+    --hill-1: #6e4532;
+    --hill-2: #8a5639;
+    --hill-3: #a96a46;
+
+    --glow-a: rgba(120, 72, 44, 0.28);
+    --glow-b: rgba(90, 58, 40, 0.25);
+
+    --shadow-card: 0 16px 32px -22px rgba(0, 0, 0, 0.85);
+    --shadow-lift: 0 28px 46px -24px rgba(0, 0, 0, 0.95);
+    --nav-bg: rgba(30, 24, 20, 0.85);
+  }
+}
+
+body {
+  background-image:
+    radial-gradient(900px 520px at -5% -10%, var(--glow-a), transparent 65%),
+    radial-gradient(760px 480px at 105% 0%, var(--glow-b), transparent 65%);
+  background-attachment: fixed;
+  font-size: 16px;
+}
+#uploader {
+  background: transparent;
+}
+
+nav[data-simple-nav] {
+  border-bottom: 0;
+  box-shadow: 0 10px 24px -22px rgba(150, 90, 50, 0.6);
+}
+/* ------------------------------------------------------------ the sunset card */
+#tools-header {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  margin-top: 0.75rem;
+  padding: clamp(2rem, 5vw, 3.75rem) clamp(1.5rem, 5vw, 3.75rem) clamp(2.25rem, 5vw, 4rem);
+  border-radius: 34px;
+  background: var(--sky);
+  box-shadow: var(--shadow-lift);
+}
+#tools-header > * {
+  position: relative;
+  z-index: 1;
+}
+/* the sun */
+#tools-header::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  right: clamp(4rem, 17%, 15rem);
+  top: clamp(1.5rem, 14%, 4.5rem);
+  width: clamp(70px, 9vw, 112px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--sun);
+  box-shadow: 0 0 0 18px var(--sun-glow), 0 0 70px 30px var(--sun-glow);
+  opacity: 0.95;
+}
+/* the hills */
+#tools-header::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 72%;
+  background:
+    radial-gradient(ellipse 30% 50% at 64% 124%, var(--hill-3) 98.5%, transparent 100%),
+    radial-gradient(ellipse 28% 64% at 97% 112%, var(--hill-2) 98.5%, transparent 100%),
+    radial-gradient(ellipse 36% 74% at 80% 128%, var(--hill-1) 98.5%, transparent 100%),
+    radial-gradient(ellipse 30% 46% at 44% 132%, var(--hill-1) 98.5%, transparent 100%);
+  pointer-events: none;
+}
+.ph-eyebrow {
+  align-self: flex-start;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+#tools-header h1.ph-title {
+  font-size: clamp(2.4rem, 5.4vw, 4.1rem);
+  line-height: 1.04;
+  max-width: 13ch;
+}
+#tools-header h1.ph-title em {
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: inherit;
+  color: var(--accent);
+}
+.ph-lede {
+  max-width: 34ch;
+  font-size: clamp(1rem, 1.4vw, 1.12rem);
+}
+.ph-note {
+  font-size: 0.82rem;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface) 75%, transparent);
+  padding: 0.45rem 0.9rem 0.45rem 0.75rem;
+  border-radius: 999px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+@media (max-width: 720px) {
+  #tools-header {
+    padding-bottom: 11rem;
+    border-radius: 28px;
+  }
+  #tools-header::after {
+    height: 9.5rem;
+    background:
+      radial-gradient(ellipse 52% 62% at 30% 118%, var(--hill-3) 98.5%, transparent 100%),
+      radial-gradient(ellipse 50% 78% at 92% 112%, var(--hill-2) 98.5%, transparent 100%),
+      radial-gradient(ellipse 60% 92% at 62% 124%, var(--hill-1) 98.5%, transparent 100%);
+  }
+  #tools-header::before {
+    top: auto;
+    bottom: 5.5rem;
+    right: 2.5rem;
+    width: 64px;
+  }
+}
+
+/* ------------------------------------------------------------ search and grid */
+#search-bar {
+  border: 0;
+  box-shadow: var(--shadow-card);
+}
+#shortcut {
+  border: 0;
+  border-radius: 10px;
+}
+.category-header {
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* A tint per category, like the category chips in the reference. */
+/* The groups follow the search box in the page, so the count starts at 2. */
+.category-group:nth-child(6n + 2) { --c: var(--c1); --i: var(--i1); }
+.category-group:nth-child(6n + 3) { --c: var(--c2); --i: var(--i2); }
+.category-group:nth-child(6n + 4) { --c: var(--c3); --i: var(--i3); }
+.category-group:nth-child(6n + 5) { --c: var(--c4); --i: var(--i4); }
+.category-group:nth-child(6n + 6) { --c: var(--c5); --i: var(--i5); }
+.category-group:nth-child(6n + 1) { --c: var(--c6); --i: var(--i6); }
+.category-header > span::before {
+  content: '';
+  display: inline-block;
+  width: 0.6em;
+  height: 0.6em;
+  margin-right: 0.5em;
+  border-radius: 50%;
+  background: var(--c, var(--accent-soft));
+  box-shadow: inset 0 0 0 0.16em var(--i, var(--accent));
+  vertical-align: 0.06em;
+}
+
+.tool-card {
+  border: 0;
+}
+.tool-card:hover,
+.tool-card:focus-visible {
+  transform: translateY(-4px);
+}
+.tool-card i {
+  width: 3.3rem;
+  height: 3.3rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--c, var(--accent-soft));
+  color: var(--i, var(--accent));
+  font-size: 1.55rem;
+  transition: transform 0.2s ease;
+}
+.tool-card:hover i {
+  color: var(--i, var(--accent));
+  transform: scale(1.06);
+}
+.tool-card h3 {
+  font-weight: 600;
+}
+.compact-mode .tool-card {
+  border-bottom-color: var(--line);
+}
+
+/* ------------------------------------------------------------- tool pages */
+#tool-uploader {
+  border: 0;
+  border-radius: 34px;
+  box-shadow: var(--shadow-lift);
+}
+#drop-zone {
+  background: var(--surface-2);
+  border: 2px dashed var(--line-strong);
+  border-radius: 26px;
+}
+#drop-zone i {
+  color: var(--accent);
+}
+.btn-gradient,
+#alert-ok {
+  background-image: var(--btn-grad);
+  box-shadow: var(--btn-glow);
+}
+.btn-gradient:hover:not(:disabled),
+#alert-ok:hover {
+  background-image: var(--btn-grad-hover);
+  box-shadow: var(--btn-glow);
+}
+.btn-gradient:focus,
+.btn-gradient:focus-visible {
+  box-shadow: var(--btn-glow);
+}
+button:is(.bg-gray-600, .bg-gray-700):not(:disabled) {
+  border: 0;
+  background: var(--surface-2);
+}
+button:is(.bg-gray-600, .bg-gray-700):hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+input[type='text'],
+input[type='number'],
+input[type='password'],
+input[type='email'],
+input[type='search'],
+select,
+textarea {
+  border-radius: var(--r-input);
+}
+.faq-d,
+.pdf-panel {
+  border: 0;
+  box-shadow: var(--shadow-card);
+}
+#loader-modal > div,
+#alert-modal > div {
+  border: 0;
+  border-radius: 30px;
+  box-shadow: var(--shadow-lift);
+}
+footer,
+[data-simple-footer] {
+  border-top-color: transparent;
+}

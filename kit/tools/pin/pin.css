@@ -1,0 +1,193 @@
+/* Paperhaus pin button, account chip and pin steps. Uses the design tokens, with
+   fallbacks for THEME=none. */
+.ph-bar {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+}
+.ph-pin,
+.ph-me {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 2.4rem;
+  padding: 0 0.95rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--text, #f3f4f6);
+  background: var(--surface, #1f2937);
+  box-shadow: var(--shadow-card, 0 0 0 1px #374151);
+  white-space: nowrap;
+}
+.ph-pin[hidden] {
+  display: none;
+}
+.ph-pin i {
+  font-size: 1.1rem;
+  color: var(--accent, #818cf8);
+}
+.ph-pin:hover,
+.ph-me:hover {
+  background: var(--accent-soft, rgba(99, 102, 241, 0.16));
+}
+.ph-me {
+  padding: 0 0.85rem 0 0.3rem;
+}
+.ph-avatar {
+  width: 1.85rem;
+  height: 1.85rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--btn-text, #ffffff);
+  background: var(--btn-grad, var(--btn-bg, #4f46e5));
+}
+.ph-me-name {
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 560px) {
+  .ph-pin span,
+  .ph-me-name {
+    display: none;
+  }
+  .ph-pin {
+    padding: 0;
+    width: 2.4rem;
+    justify-content: center;
+  }
+  .ph-me {
+    padding: 0 0.3rem;
+  }
+}
+.ph-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  min-width: 15rem;
+  padding: 0.4rem;
+  border-radius: 18px;
+  background: var(--surface, #1f2937);
+  box-shadow: var(--shadow-lift, 0 20px 40px -20px rgba(0, 0, 0, 0.6));
+  border: 1px solid var(--line, #374151);
+  z-index: 60;
+}
+.ph-menu-who {
+  display: flex;
+  flex-direction: column;
+  padding: 0.6rem 0.75rem 0.7rem;
+  border-bottom: 1px solid var(--line, #374151);
+  margin-bottom: 0.3rem;
+}
+.ph-menu-who strong {
+  color: var(--text, #f3f4f6);
+}
+.ph-menu-who span {
+  color: var(--muted, #9ca3af);
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+.ph-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 12px;
+  font-weight: 600;
+  color: var(--text, #f3f4f6);
+}
+.ph-menu-item:hover {
+  background: var(--surface-2, #111827);
+}
+.ph-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: color-mix(in srgb, var(--bg, #000) 70%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+@media (max-width: 560px) {
+  .ph-sheet {
+    align-items: flex-end;
+  }
+}
+.ph-sheet-card {
+  width: min(460px, 100%);
+  padding: 1.4rem 1.4rem 1.2rem;
+  border-radius: calc(var(--r-card, 16px) + 6px);
+  background: var(--surface, #1f2937);
+  color: var(--text, #f3f4f6);
+  box-shadow: var(--shadow-lift, 0 30px 60px -30px rgba(0, 0, 0, 0.6));
+}
+.ph-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+.ph-sheet-head img {
+  border-radius: 12px;
+}
+.ph-sheet-head h2 {
+  flex: 1;
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.ph-sheet-x {
+  width: 2.2rem;
+  height: 2.2rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-2, #111827);
+  color: var(--text, #f3f4f6);
+}
+.ph-steps {
+  counter-reset: ph;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+.ph-steps li {
+  counter-increment: ph;
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  line-height: 1.45;
+  color: var(--text-2, #d1d5db);
+}
+.ph-steps li::before {
+  content: counter(ph);
+  flex: none;
+  width: 1.7rem;
+  height: 1.7rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 0.85rem;
+  background: var(--accent-soft, rgba(99, 102, 241, 0.16));
+  color: var(--accent, #818cf8);
+}
+.ph-steps b {
+  color: var(--text, #f3f4f6);
+}
+.ph-sheet-note {
+  font-size: 0.85rem;
+  color: var(--muted, #9ca3af);
+}

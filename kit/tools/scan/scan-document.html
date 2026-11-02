@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <title>Scan to PDF | BentoPDF</title>
+    <meta
+      name="description"
+      content="Scan documents, receipts, ID cards and books with your camera. Auto crop, shadow removal, searchable PDF. Runs entirely in your browser."
+    />
+    <link rel="canonical" href="https://www.bentopdf.com/scan-document" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Scan" />
+
+    <link href="/src/css/styles.css" rel="stylesheet" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/images/favicon.svg" />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="192x192"
+      href="/images/favicon-192x192.png"
+    />
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="/images/apple-touch-icon.png"
+    />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  </head>
+
+  <body class="antialiased bg-gray-900">
+    {{> navbar }}
+
+    <div
+      id="uploader"
+      class="min-h-screen flex flex-col items-center justify-start py-12 p-4 bg-gray-900"
+    >
+      <div
+        id="tool-uploader"
+        class="bg-gray-800 rounded-xl shadow-xl px-4 py-8 md:p-8 max-w-5xl w-full text-gray-200 border border-gray-700"
+      >
+        <button
+          id="back-to-tools"
+          class="flex items-center gap-2 text-indigo-300 hover:text-indigo-400 mb-6 font-semibold"
+        >
+          <i data-lucide="arrow-left" class="cursor-pointer"></i>
+          <span class="cursor-pointer">Back to Tools</span>
+        </button>
+
+        <h1 class="text-2xl font-bold text-white mb-2">Scan to PDF</h1>
+        <p class="text-gray-400 mb-6">
+          Point your camera at a page. Paperhaus finds the edges, straightens
+          it and cleans it up, then makes a PDF. Nothing leaves your device.
+        </p>
+
+        <div class="sc-modes" role="tablist" aria-label="What are you scanning?">
+          <button class="sc-mode is-on" data-mode="doc" role="tab" aria-selected="true">
+            <i class="ph ph-file-text"></i><span>Document</span>
+          </button>
+          <button class="sc-mode" data-mode="id" role="tab" aria-selected="false">
+            <i class="ph ph-identification-card"></i><span>ID card</span>
+          </button>
+          <button class="sc-mode" data-mode="book" role="tab" aria-selected="false">
+            <i class="ph ph-book-open"></i><span>Book</span>
+          </button>
+          <button class="sc-mode" data-mode="qr" role="tab" aria-selected="false">
+            <i class="ph ph-qr-code"></i><span>QR code</span>
+          </button>
+        </div>
+        <p id="sc-mode-hint" class="sc-hint">
+          Scan one or many pages. Each page is cropped and cleaned up
+          automatically.
+        </p>
+
+        <div id="sc-start" class="sc-start">
+          <button id="sc-camera" class="sc-big btn-gradient">
+            <i class="ph ph-camera"></i>
+            <span>
+              <strong>Open camera</strong>
+              <small>Live edge detection and auto-capture</small>
+            </span>
+          </button>
+          <label id="sc-photo-label" class="sc-big sc-ghost">
+            <i class="ph ph-device-mobile-camera"></i>
+            <span>
+              <strong>Phone camera app</strong>
+              <small>Full resolution, one photo at a time</small>
+            </span>
+            <input id="sc-photo" type="file" accept="image/*" capture="environment" hidden />
+          </label>
+          <label id="sc-import-label" class="sc-big sc-ghost">
+            <i class="ph ph-images"></i>
+            <span>
+              <strong>Import photos</strong>
+              <small>Or drop images anywhere on this page</small>
+            </span>
+            <input id="sc-import" type="file" accept="image/*" multiple hidden />
+          </label>
+        </div>
+
+        <!-- QR results -->
+        <div id="sc-qr-panel" class="sc-panel hidden">
+          <div class="sc-panel-head">
+            <h2>QR codes found</h2>
+            <button id="sc-qr-clear" class="sc-link" type="button">Clear</button>
+          </div>
+          <ul id="sc-qr-list" class="sc-qr-list"></ul>
+          <p id="sc-qr-empty" class="sc-muted">
+            Nothing yet. Open the camera and point it at a QR code, or import a
+            picture of one.
+          </p>
+        </div>
+
+        <!-- Pages -->
+        <div id="sc-pages" class="sc-panel hidden">
+          <div class="sc-panel-head">
+            <h2>Pages <span id="sc-count" class="sc-count">0</span></h2>
+            <div class="sc-head-actions">
+              <button id="sc-apply-all" class="sc-link" type="button">Same look for all</button>
+              <button id="sc-clear" class="sc-link sc-danger" type="button">Clear all</button>
+            </div>
+          </div>
+          <p class="sc-muted sc-tip">
+            Tap a page to adjust its crop or look. Drag to reorder.
+          </p>
+          <div id="sc-grid" class="sc-grid"></div>
+        </div>
+
+        <!-- Export -->
+        <div id="sc-export" class="sc-panel hidden">
+          <div class="sc-panel-head"><h2>Save</h2></div>
+          <div class="sc-form">
+            <label class="sc-field sc-wide">
+              <span>File name</span>
+              <input id="sc-name" type="text" autocomplete="off" spellcheck="false" />
+            </label>
+            <label class="sc-field">
+              <span>Page size</span>
+              <select id="sc-size">
+                <option value="fit">Fit to scan</option>
+                <option value="a4">A4</option>
+                <option value="letter">Letter</option>
+              </select>
+            </label>
+            <label class="sc-field">
+              <span>Quality</span>
+              <select id="sc-quality">
+                <option value="high">High (print)</option>
+                <option value="balanced" selected>Balanced</option>
+                <option value="small">Small (email)</option>
+              </select>
+            </label>
+            <label class="sc-field">
+              <span>Look for new pages</span>
+              <select id="sc-default-filter"></select>
+            </label>
+            <label class="sc-check sc-wide">
+              <input id="sc-ocr" type="checkbox" />
+              <span>
+                <strong>Make text searchable (OCR)</strong>
+                <small>Lets you search and copy text in the PDF. Takes a little longer.</small>
+              </span>
+            </label>
+            <label id="sc-lang-field" class="sc-field hidden">
+              <span>Text language</span>
+              <select id="sc-lang"></select>
+            </label>
+            <label class="sc-field">
+              <span>Password (optional)</span>
+              <input id="sc-password" type="password" autocomplete="new-password" placeholder="No password" />
+            </label>
+          </div>
+          <div class="sc-actions">
+            <button id="sc-save" class="btn-gradient sc-btn"><i class="ph ph-download-simple"></i> Download PDF</button>
+            <button id="sc-share" class="sc-btn sc-ghost-btn hidden"><i class="ph ph-share-network"></i> Share</button>
+            <button id="sc-images" class="sc-btn sc-ghost-btn"><i class="ph ph-file-image"></i> Save as images</button>
+            <button id="sc-text" class="sc-btn sc-ghost-btn"><i class="ph ph-text-t"></i> Copy text</button>
+          </div>
+          <p id="sc-result" class="sc-muted"></p>
+        </div>
+
+        <p class="sc-privacy">
+          <i class="ph ph-lock-simple"></i>
+          Scans are processed on this device and never uploaded. Unfinished
+          scans are kept in this browser until you clear them.
+        </p>
+      </div>
+    </div>
+
+    <!-- Camera -->
+    <div id="sc-cam" class="sc-cam hidden" aria-modal="true" role="dialog" aria-label="Camera">
+      <video id="sc-video" playsinline muted autoplay></video>
+      <canvas id="sc-overlay"></canvas>
+      <div id="sc-flash" class="sc-flash"></div>
+      <div class="sc-cam-top">
+        <button id="sc-cam-close" class="sc-round" aria-label="Close camera"><i class="ph ph-x"></i></button>
+        <span id="sc-cam-mode" class="sc-cam-pill">Document</span>
+        <div class="sc-cam-right">
+          <button id="sc-torch" class="sc-round hidden" aria-label="Flashlight" aria-pressed="false"><i class="ph ph-flashlight"></i></button>
+          <button id="sc-auto" class="sc-round is-on" aria-label="Auto-capture" aria-pressed="true"><i class="ph ph-lightning"></i><b>A</b></button>
+        </div>
+      </div>
+      <p id="sc-cam-hint" class="sc-cam-hint">Looking for a page...</p>
+      <div class="sc-cam-bottom">
+        <button id="sc-cam-thumb" class="sc-cam-thumb" aria-label="Done, show pages">
+          <img id="sc-cam-thumb-img" alt="" />
+          <span id="sc-cam-count">0</span>
+        </button>
+        <button id="sc-shutter" class="sc-shutter" aria-label="Take picture">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <circle class="sc-ring-bg" cx="50" cy="50" r="46"></circle>
+            <circle id="sc-ring" class="sc-ring" cx="50" cy="50" r="46"></circle>
+          </svg>
+          <span></span>
+        </button>
+        <button id="sc-cam-done" class="sc-cam-done">Done</button>
+      </div>
+    </div>
+
+    <!-- Page editor -->
+    <div id="sc-edit" class="sc-edit hidden" aria-modal="true" role="dialog" aria-label="Edit page">
+      <div class="sc-edit-top">
+        <button id="sc-edit-cancel" class="sc-link" type="button">Cancel</button>
+        <div class="sc-tabs" role="tablist">
+          <button class="sc-tab is-on" data-tab="crop" type="button"><i class="ph ph-crop"></i> Crop</button>
+          <button class="sc-tab" data-tab="look" type="button"><i class="ph ph-magic-wand"></i> Enhance</button>
+        </div>
+        <button id="sc-edit-done" class="btn-gradient sc-btn sc-btn-sm" type="button">Done</button>
+      </div>
+      <div id="sc-stage" class="sc-stage">
+        <div id="sc-crop" class="sc-crop">
+          <img id="sc-crop-img" alt="Page photo" draggable="false" />
+          <svg id="sc-crop-svg" class="sc-crop-svg"></svg>
+        </div>
+        <div id="sc-preview-wrap" class="sc-preview hidden"><img id="sc-preview" alt="Page preview" /><i id="sc-preview-split" class="sc-split-line hidden"></i></div>
+        <div id="sc-preview-busy" class="sc-busy hidden"><div class="solid-spinner"></div></div>
+        <canvas id="sc-loupe" class="sc-loupe hidden" width="240" height="240"></canvas>
+      </div>
+      <div class="sc-edit-tools">
+        <div id="sc-crop-tools" class="sc-toolrow">
+          <div id="sc-side" class="sc-seg hidden">
+            <button data-side="0" class="is-on" type="button">Front</button>
+            <button data-side="1" type="button">Back</button>
+          </div>
+          <button id="sc-auto-crop" class="sc-chip" type="button"><i class="ph ph-scan"></i> Auto</button>
+          <button id="sc-full-crop" class="sc-chip" type="button"><i class="ph ph-corners-out"></i> Whole photo</button>
+        </div>
+        <div id="sc-look-tools" class="sc-look hidden">
+          <div id="sc-filters" class="sc-filters"></div>
+          <div class="sc-sliders">
+            <label><span>Brightness</span><input id="sc-bright" type="range" min="-50" max="50" value="0" /></label>
+            <label><span>Contrast</span><input id="sc-contrast" type="range" min="-50" max="50" value="0" /></label>
+            <label id="sc-split-field" class="hidden"><span>Page split</span><input id="sc-split" type="range" min="30" max="70" value="50" /></label>
+          </div>
+          <div class="sc-toolrow">
+            <button id="sc-rot-left" class="sc-chip" type="button"><i class="ph ph-arrow-counter-clockwise"></i> Rotate</button>
+            <button id="sc-rot-right" class="sc-chip" type="button"><i class="ph ph-arrow-clockwise"></i> Rotate</button>
+            <button id="sc-edit-delete" class="sc-chip sc-danger" type="button"><i class="ph ph-trash"></i> Delete page</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Text result -->
+    <div id="sc-text-modal" class="sc-sheet hidden" role="dialog" aria-modal="true" aria-label="Text from your scan">
+      <div class="sc-sheet-card">
+        <div class="sc-panel-head">
+          <h2>Text from your scan</h2>
+          <button id="sc-text-close" class="sc-round sc-round-light" aria-label="Close"><i class="ph ph-x"></i></button>
+        </div>
+        <textarea id="sc-text-out" spellcheck="false"></textarea>
+        <div class="sc-actions">
+          <button id="sc-text-copy" class="btn-gradient sc-btn"><i class="ph ph-copy"></i> Copy</button>
+          <button id="sc-text-dl" class="sc-btn sc-ghost-btn"><i class="ph ph-download-simple"></i> Save .txt</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Share when the first tap expired -->
+    <div id="sc-share-modal" class="sc-sheet hidden" role="dialog" aria-modal="true" aria-label="Share">
+      <div class="sc-sheet-card sc-sheet-small">
+        <h2>Your PDF is ready</h2>
+        <p class="sc-muted">Tap Share to send it by email, message or another app.</p>
+        <div class="sc-actions">
+          <button id="sc-share-now" class="btn-gradient sc-btn"><i class="ph ph-share-network"></i> Share</button>
+          <button id="sc-share-cancel" class="sc-btn sc-ghost-btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="sc-drop" class="sc-drop hidden"><div><i class="ph ph-images"></i><p>Drop photos to add pages</p></div></div>
+
+    <div
+      id="loader-modal"
+      class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
+    >
+      <div
+        class="bg-gray-800 p-8 rounded-lg flex flex-col items-center gap-4 border border-gray-700 shadow-xl"
+      >
+        <div class="solid-spinner"></div>
+        <p id="loader-text" class="text-white text-lg font-medium">
+          Processing...
+        </p>
+      </div>
+    </div>
+
+    <div
+      id="alert-modal"
+      class="fixed inset-0 bg-gray-900 bg-opacity-90 flex items-center justify-center z-50 hidden"
+    >
+      <div
+        class="bg-gray-800 rounded-lg shadow-xl p-6 max-w-sm w-full border border-gray-700"
+      >
+        <h3 id="alert-title" class="text-xl font-bold text-white mb-2">
+          Alert
+        </h3>
+        <p id="alert-message" class="text-gray-300 mb-6"></p>
+        <button
+          id="alert-ok"
+          class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200"
+        >
+          OK
+        </button>
+      </div>
+    </div>
+
+    {{> footer }}
+    <script type="module" src="/src/js/utils/lucide-init.ts"></script>
+    <script type="module" src="/src/js/utils/full-width.ts"></script>
+    <script type="module" src="/src/js/utils/simple-mode-footer.ts"></script>
+    <script type="module" src="/src/js/logic/kit-scan/scan-page.ts"></script>
+    <script type="module" src="/src/js/mobileMenu.ts"></script>
+    <script type="module" src="/src/js/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,93 @@
+/* Studio: the Studiko sibling.
+ * Paper cream, espresso ink, Geist with one Instrument Serif italic word, lowercase
+ * headlines, hairline borders, #labels, a thin-line mark. Accent: burnt orange for
+ * links and the italic word, pastel orange for buttons. The green status dot nods
+ * to Studiko.
+ */
+:root,
+:host {
+  --bg: #faf6ee;
+  --surface: #fffdf8;
+  --surface-2: #f3ebdd;
+  --line: #e8ddcb;
+  --line-strong: #d3c3a9;
+  --text: #2a211a;
+  --text-2: #5e5145;
+  --muted: #7a6b5a;
+  --accent: #a84c1c;
+  --accent-hover: #873b14;
+  --accent-soft: #fce3cf;
+  --on-accent: #2a211a;
+  --btn-bg: #f6b88a;
+  --btn-bg-hover: #f2a673;
+  --btn-text: #2a211a;
+  --good: #2f6b47;
+  --good-soft: #dcecdf;
+  --font-body: 'Geist', 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Geist', 'Helvetica Neue', Arial, sans-serif;
+  --font-em: 'Instrument Serif', Georgia, serif;
+  --display-weight: 500;
+  --display-tracking: -0.045em;
+  --display-case: lowercase;
+  --r-card: 14px;
+  --r-input: 12px;
+  --shadow-lift: 0 16px 34px -26px rgba(74, 46, 24, 0.4);
+}
+@media (prefers-color-scheme: dark) {
+  :root,
+  :host {
+    --bg: #1c1712;
+    --surface: #25201a;
+    --surface-2: #2f2821;
+    --line: #3a3128;
+    --line-strong: #4d4135;
+    --text: #f5ecdd;
+    --text-2: #cbbba6;
+    --muted: #a08d77;
+    --accent: #f6b88a;
+    --accent-hover: #f9cba6;
+    --accent-soft: #3d2a1c;
+    --on-accent: #1c1712;
+    --btn-bg: #f6b88a;
+    --btn-bg-hover: #f9cba6;
+    --btn-text: #1c1712;
+    --good: #8cc9a0;
+    --good-soft: #1f3226;
+    --bad: #ff9c8f;
+    --bad-soft: #3b1f1c;
+    --warn: #f2c27a;
+    --warn-soft: #3a2b14;
+    --shadow-lift: 0 16px 34px -24px rgba(0, 0, 0, 0.8);
+  }
+}
+
+.ph-eyebrow::before {
+  content: '#';
+}
+.ph-eyebrow {
+  font-size: 0.95rem;
+}
+
+/* Section labels in the Studiko #label style */
+.category-header {
+  text-transform: lowercase;
+  font-size: 1.3rem;
+  font-weight: 500;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+.category-header > span::before {
+  content: '#';
+  color: var(--muted);
+  margin-right: 0.05em;
+}
+
+/* Cards stay flat; hover draws a darker hairline instead of a heavy shadow. */
+.tool-card:hover,
+.tool-card:focus-visible {
+  border-color: var(--text);
+  transform: translateY(-2px);
+}
+.tool-card i {
+  font-size: 2rem;
+}
