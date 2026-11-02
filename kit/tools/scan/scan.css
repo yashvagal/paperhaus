@@ -534,7 +534,9 @@
   -webkit-backdrop-filter: blur(8px);
   font-weight: 600;
   font-size: 0.92rem;
-  white-space: nowrap;
+  width: max-content;
+  max-width: calc(100% - 2rem);
+  text-align: center;
 }
 .sc-shutter {
   position: relative;
@@ -612,6 +614,119 @@
   font-weight: 700;
   background: rgba(255, 255, 255, 0.92);
   color: #2b1a10;
+}
+
+/* One page / Many pages, under the top bar */
+.sc-cam-seg {
+  position: absolute;
+  left: 50%;
+  top: calc(max(1rem, env(safe-area-inset-top)) + 3.6rem);
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.2rem;
+  padding: 0.25rem;
+  border-radius: 999px;
+  background: rgba(20, 16, 12, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.sc-cam-seg button {
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+}
+.sc-cam-seg button.is-on {
+  background: #fff;
+  color: #2b1a10;
+}
+.sc-cam-seg.hidden {
+  display: none;
+}
+
+/* Manual focus */
+.sc-focus-ring {
+  position: absolute;
+  width: 4.5rem;
+  height: 4.5rem;
+  margin: -2.25rem 0 0 -2.25rem;
+  border: 2px solid #f7a86e;
+  border-radius: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(1.35);
+}
+.sc-focus-ring.go {
+  animation: sc-focus 0.9s ease-out;
+}
+@keyframes sc-focus {
+  0% {
+    opacity: 1;
+    transform: scale(1.35);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+.sc-focus-panel {
+  position: absolute;
+  left: 50%;
+  bottom: calc(11.4rem + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(26rem, calc(100% - 2rem));
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.6rem 0.55rem 0.95rem;
+  border-radius: 999px;
+  background: rgba(20, 16, 12, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.sc-focus-panel.hidden {
+  display: none;
+}
+.sc-focus-panel input {
+  flex: 1;
+  min-width: 0;
+  accent-color: #f7a86e;
+}
+.sc-focus-auto {
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+.sc-focus-auto.is-on {
+  background: #f7a86e;
+  color: #2b1a10;
+}
+
+/* "Take the next page" after a phone camera photo */
+.sc-again {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.75rem 1.1rem;
+  border-radius: 999px;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--sc-text, inherit);
+  background: var(--sc-surface-2, rgba(255, 255, 255, 0.08));
+}
+.sc-again.hidden {
+  display: none;
 }
 
 /* ------------------------------------------------------------ editor */
