@@ -222,14 +222,19 @@ async function preparePage(mode: 'text' | 'picture'): Promise<{ html: string; ti
 
 /** Keep the readable part of a page for the text layout: the article, without menus or footers. */
 function readerView(doc: Document, title: string, base: string): void {
-  const pick =
-    doc.querySelector('[itemprop="articleBody"]') ||
-    doc.querySelector('.mw-parser-output') ||
-    doc.querySelector('article') ||
-    doc.querySelector('main') ||
-    doc.querySelector('[role="main"]') ||
-    doc.querySelector('#content, .content, #main, .post, .entry-content') ||
-    doc.body;
+  // The candidate with the most text wins (pages can have several, e.g. a small
+  // badge before the real article body).
+  const sel = '[itemprop="articleBody"], .mw-parser-output, article, main, [role="main"], #content, .content, #main, .post, .entry-content';
+  const cands = Array.from(doc.querySelectorAll<HTMLElement>(sel));
+  const size = (el: Element) => (el.textContent || '').replace(/\s+/g, ' ').length;
+  let best = cands.sort((a, b) => size(b) - size(a))[0];
+  // Then the innermost candidate that still holds most of that text (the article body
+  // inside <main>, without the page's own menus).
+  if (best) {
+    const full = size(best);
+    for (const c of cands) if (c !== best && best.contains(c) && size(c) >= full * 0.7) best = c;
+  }
+  const pick = best && size(best) > Math.min(800, size(doc.body) * 0.3) ? best : doc.body;
   const keep = pick.cloneNode(true) as HTMLElement;
   keep
     .querySelectorAll(
