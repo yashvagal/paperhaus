@@ -181,7 +181,7 @@ function renderPeople(): void {
     const row = document.createElement('div');
     row.className = 'es-person';
     const declined = state.declined && state.declined.index === i;
-    const status = st.signed ? `Signed ${formatDate(st.signed.at)}` : declined ? 'Declined' : st.viewed ? 'Opened' : 'Waiting';
+    const status = st.signed ? `Signed ${formatDate(st.signed.at)}` : declined ? 'Declined' : st.viewed || i === me ? 'Opened' : 'Waiting';
     row.innerHTML = `<span class="es-dot" style="background:${SIGNER_COLORS[i % SIGNER_COLORS.length]}"></span><span class="es-person-name"></span><span class="es-chip"></span>`;
     row.querySelector('.es-person-name')!.textContent = `${env.ordered ? `${i + 1}. ` : ''}${s.name}${i === me ? ' (you)' : ''}`;
     const chip = row.querySelector('.es-chip')!;
