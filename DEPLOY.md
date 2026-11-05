@@ -76,6 +76,21 @@ In the Cloudflare dashboard, open **Zero Trust**. The first time, choose a team 
 
 To add a friend later, add their email to the `Paperhaus` policy. If an email isn't on the list, Cloudflare sends no code, so check the spelling first.
 
+## 3b. Turn on Request Signatures
+
+Signing requests are stored, encrypted, in Cloudflare KV, and signers open them without an invite.
+
+1. In Cloudflare, go to **Storage & Databases → Workers KV → Create**, and name it `paperhaus-esign`.
+2. Open the Pages project, then **Settings → Bindings → Add → KV namespace**. Variable name `ESIGN`, namespace `paperhaus-esign`. Add it for both **Production** and **Preview**.
+3. Let signers reach the signing page without signing in. In **Zero Trust → Access → Applications**, edit `Paperhaus icons` and add these **Paths** on the main hostname:
+   - `sign-request`
+   - `sign-request.html`
+   - `api/esign/p/*`
+   - `assets/*`
+   - `kit-theme/*`
+   These are the signing page, the API it uses (every call needs a token from a signing link) and the app's code and styles, which are open source anyway. Creating a request (`api/esign/new`) still needs a Paperhaus sign-in.
+4. Retry the latest deployment (**Deployments → ... → Retry deployment**) so the binding takes effect.
+
 ## 4. Put the website on Vercel
 
 1. Sign in at <https://vercel.com> and click **Add New → Project**.

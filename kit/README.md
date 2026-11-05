@@ -10,13 +10,14 @@ What it does on every build:
 - Applies a Paperhaus design in the family of your other sites, with automatic light and dark mode (see "Designs" below).
 - Uses BentoPDF's clean "simple mode": only the tools, no marketing pages.
 - Adds Paperhaus's own **Scan** tool, a CamScanner-style scanner (see "Scan" below).
+- Adds **Request Signatures**: send a PDF to several people and get it back signed by all of them, with a signing certificate (see "Request Signatures" below).
 - Lets you pin Paperhaus to your dock, taskbar or phone home screen straight from the browser (no app store), and shows who is signed in (see "Pin it and stay signed in" below).
 - Serves every engine from your own site instead of public CDNs. That covers PyMuPDF, Ghostscript, CoherentPDF, the Tesseract OCR engine with its language data and fonts, LibreOffice for Office files, and OpenCV for scanning. The site loads nothing from third parties.
 - Splits LibreOffice's two large files (28 MB and 48 MB) into pieces under Cloudflare's 25 MiB per-file limit, and temporarily patches the loader to put them back together in the browser.
 - Writes Cloudflare security headers: a strict Content Security Policy that only allows connections to your own site, the cross-origin isolation headers Office conversion needs, and a header that keeps search engines out.
 - Checks the output fits Cloudflare's free plan before finishing.
 
-Nothing in BentoPDF's `src/` folder is permanently changed, so pulling BentoPDF updates stays a clean merge. The Scan tool lives in `kit/tools/scan/` and is copied in only for the build, then removed again, even if the build fails.
+Nothing in BentoPDF's `src/` folder is permanently changed, so pulling BentoPDF updates stays a clean merge. The Paperhaus tools live in `kit/tools/` and are copied in only for the build, then removed again, even if the build fails.
 
 Tested against BentoPDF v2.8.11 (commit `f638f8e`, Nov 1, 2026).
 
@@ -118,6 +119,34 @@ All five passed in an automated test with nothing loaded from outside the site. 
 | Keeps your work | Unfinished scans stay in that browser on that device until you tap **Clear all**, so closing the tab loses nothing. Nothing is uploaded. |
 
 The camera needs HTTPS, which Cloudflare Pages always provides. The security headers allow the camera for your own site only.
+
+---
+
+## Request Signatures
+
+**Request Signatures** sits next to **Sign PDF**. You place fields for each signer, Paperhaus makes one private link per signer, and you email the links from your own email account. Signers need no account and no invite: whoever has a link can open it and sign.
+
+| Step | What happens |
+| --- | --- |
+| 1. Document | Choose a PDF, up to 20 MB, and give it a title. |
+| 2. Signers | Up to 10, each with a name and email. **Add me** adds you (your Paperhaus sign-in email). **Sign in this order** makes each person wait for the one before. |
+| 3. Fields | Pick a signer, pick a field (Signature, Initials, Date signed, Full name, Text, Checkbox) and tap the page. Drag to move, pull the corner to resize, the x to remove. Every signer needs at least one Signature or Initials field. |
+| 4. Send | **Send from** is the email the invitations go out from, filled in with your sign-in email and remembered. Press **Create signing links**, then for each signer press **Gmail** or **Outlook** (a draft opens in that account, addressed and written, you press Send), **Email app**, or **Copy link**. Gmail opens the account that matches **Send from**, so a work address like `you@yourcompany.com` works when it is a Google Workspace account signed in to that browser. For Microsoft 365 addresses use **Outlook**. |
+| Signing | The signer opens the link, taps each highlighted field, adopts a signature (typed in one of three handwriting styles, or drawn with a finger, pen or mouse), agrees to sign electronically, and presses **Finish**. They can also **Decline**, with a reason. |
+| Tracking | **Sent for signature**, at the top of the page, lists your requests on that device with who has opened and signed. Send a reminder with the same buttons. **Cancel** deletes a request and stops its links. |
+| Finished copy | Once everyone signs, **Signed PDF** downloads the document with every field drawn in, plus a signing certificate page: the original's SHA-256 fingerprint, and each signer's email, view and signing times, IP address and device. **Send everyone the signed copy** emails a read-only download link to all signers. The last signer can download it straight away too. |
+
+How it keeps documents private:
+
+- The PDF and everything about the request (names, emails, fields, signatures) are encrypted in your browser with AES-256-GCM before upload. The key is only in the signing links, after the `#`, which browsers never send to a server. Paperhaus's server stores encrypted bytes it cannot read.
+- Each signer has their own link, and the server keeps only a hash of each link's token. A signer's link can only sign as that signer.
+- Everything is stored in Cloudflare KV and deleted automatically 14 days after sending, or right away on **Cancel**. Download the signed copy before then.
+- Paperhaus sends no email itself. Invitations come from your own account, so they reach inboxes and replies come back to you.
+- Your list of sent requests, and their keys, stay in that browser on that device. To track a request from another device, open the same page there after sending from it, or keep the signed copy.
+
+Setup (once, free): in Cloudflare create a KV namespace and bind it to the Pages project as `ESIGN`, and let signers past the Paperhaus sign-in for the signing page only. Step 3b of `DEPLOY.md` has the clicks. Until the binding exists, **Create signing links** says e-sign is not set up yet.
+
+The pieces: `kit/tools/esign/` (the two pages and their code) and `functions/api/esign/` (the small storage API, a Cloudflare Pages Function). The build adds `_routes.json` so only `/api/*` runs as a Function; the free plan allows 100,000 Function requests a day.
 
 ---
 
@@ -246,9 +275,10 @@ BentoPDF's own build regenerates a few tracked files (blog pages, a partial, a h
 - **Certificate signatures:** the Digital Signature tool works with your own certificate file. Fetching a certificate's issuer chain or a trusted timestamp needs outside servers, which the security policy blocks. Self-signed certificates and the regular Sign PDF tool are unaffected.
 - **OCR languages:** only the languages in `OCR_LANGUAGES` are offered, in OCR PDF and in Scan.
 - **Scan edge detection:** works best with a page on a darker or contrasting surface. On a white desk, or with a dark band at the page edge, drag the corners into place.
+- **Request Signatures:** these are electronic signatures with an audit certificate, like typical e-sign services, not certificate-based digital signatures. For a certificate signature on top, run the finished PDF through Digital Signature. Requests last 14 days.
 - **App icons:** the home screen and dock icons come from `kit/brand/icons/`. A custom `BRAND_LOGO` changes the logo in the header and browser tab, not those icons.
 - **Search engines:** the site sends `noindex` and its `robots.txt` blocks crawlers, so it stays unlisted.
 
 ## Cost
 
-$0. Cloudflare Pages free plan (500 builds a month, 20,000 files a site; this site uses about 5,000), Cloudflare Zero Trust free plan (up to 50 users), a public GitHub repo, and open-source engines.
+$0. Cloudflare Pages free plan (500 builds a month, 20,000 files a site; this site uses about 5,000), Cloudflare Zero Trust free plan (up to 50 users), Cloudflare KV free plan for signing requests (1 GB stored, 1,000 writes a day, enough for well over a hundred requests a day), a public GitHub repo, and open-source engines.

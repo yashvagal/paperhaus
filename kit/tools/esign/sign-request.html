@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="paperhaus-public" content="1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Sign a document | BentoPDF</title>
+    <meta name="description" content="Review and sign a document sent to you with Paperhaus." />
+    <link href="/src/css/styles.css" rel="stylesheet" />
+    <link rel="icon" type="image/svg+xml" href="/images/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  </head>
+
+  <body class="antialiased bg-gray-900 es-signer-page">
+    <header class="es-top">
+      <img class="es-logo" src="{{baseUrl}}{{#if brandLogo}}{{brandLogo}}{{else}}images/favicon.svg{{/if}}" alt="" />
+      <span class="es-wordmark">{{#if brandName}}{{brandName}}{{else}}Paperhaus{{/if}}</span>
+      <span class="es-top-right"><i class="ph ph-lock-simple"></i> Private signing link</span>
+    </header>
+
+    <main class="es-wrap es-sign-wrap">
+      <div id="es-load" class="es-card es-center">
+        <div class="es-spin"></div>
+        <p class="es-sub" id="es-load-text">Opening the document...</p>
+      </div>
+
+      <div id="es-fail" class="es-card es-center hidden">
+        <i class="ph ph-link-break es-big-icon"></i>
+        <h1 class="es-h1" id="es-fail-title">This link does not work</h1>
+        <p class="es-sub" id="es-fail-text"></p>
+      </div>
+
+      <div id="es-doc-view" class="hidden">
+        <section class="es-card es-intro">
+          <div class="es-sub" id="es-from"></div>
+          <h1 class="es-h1" id="es-title"></h1>
+          <p id="es-message" class="es-quote hidden"></p>
+          <div id="es-status" class="es-note hidden" style="margin-top: 0.9rem"></div>
+          <div id="es-done-actions" class="es-row hidden" style="margin-top: 0.9rem">
+            <button id="es-download" class="es-btn es-primary" type="button"><i class="ph ph-download-simple"></i> Download signed PDF</button>
+          </div>
+          <div id="es-people" class="es-people"></div>
+        </section>
+        <div id="es-pages" class="es-pages"></div>
+        <p class="es-sub es-fine">
+          Signed with Paperhaus. The document was encrypted on the sender's device, and only
+          people with a signing link can open it. It is deleted 14 days after it was sent.
+        </p>
+      </div>
+    </main>
+
+    <div id="es-bar" class="es-bar hidden">
+      <div class="es-progress" id="es-progress"></div>
+      <div class="es-row">
+        <button id="es-decline" class="es-btn es-small" type="button">Decline</button>
+        <button id="es-next" class="es-btn" type="button"><i class="ph ph-arrow-down"></i> Next</button>
+        <button id="es-finish" class="es-btn es-primary" type="button" disabled><i class="ph ph-check"></i> Finish</button>
+      </div>
+    </div>
+
+    <div id="es-busy" class="es-busy hidden"><div class="es-busy-card"><div class="es-spin"></div><span id="es-busy-text">Working...</span></div></div>
+    <div id="es-toast" class="es-toast hidden" role="status" aria-live="polite"></div>
+
+    <script type="module" src="/src/js/logic/kit-esign/sign-page.ts"></script>
+  </body>
+</html>

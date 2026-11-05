@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Request Signatures | BentoPDF</title>
+    <meta
+      name="description"
+      content="Send a PDF for signature. Place fields for each signer, email them a private link from your own email, and get back a signed PDF with a signing certificate."
+    />
+    <link rel="canonical" href="https://www.bentopdf.com/request-signatures" />
+    <link href="/src/css/styles.css" rel="stylesheet" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/images/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/images/favicon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  </head>
+
+  <body class="antialiased bg-gray-900">
+    {{> navbar }}
+
+    <main class="es-wrap">
+      <button id="back-to-tools" class="flex items-center gap-2 text-indigo-300 hover:text-indigo-400 mb-4 font-semibold">
+        <i data-lucide="arrow-left" class="cursor-pointer"></i>
+        <span class="cursor-pointer">Back to Tools</span>
+      </button>
+      <h1 class="es-h1">Request Signatures</h1>
+      <p class="es-sub" style="margin-top: 0.4rem; max-width: 42rem">
+        Place fields for each signer, then email everyone their own private link from your
+        own email. They sign in their browser, no account needed, and you get back a signed
+        PDF with a signing certificate. The document is encrypted on this device and deleted
+        14 days after sending.
+      </p>
+
+      <!-- Sent requests -->
+      <section id="es-sent" class="es-card hidden" style="margin-top: 1.2rem">
+        <div class="es-env-head" style="margin-bottom: 0.6rem">
+          <h2 class="es-h2" style="margin: 0"><i class="ph ph-paper-plane-tilt"></i> Sent for signature</h2>
+          <button id="es-refresh" class="es-btn es-small" type="button"><i class="ph ph-arrows-clockwise"></i> Refresh</button>
+        </div>
+        <div id="es-sent-list"></div>
+      </section>
+
+      <!-- Step 1 -->
+      <section class="es-card" style="margin-top: 1.2rem">
+        <h2 class="es-h2"><span class="es-step">1</span> Document</h2>
+        <label id="es-drop" class="es-drop" for="es-file">
+          <i class="ph ph-file-pdf"></i>
+          <strong>Choose a PDF or drop it here</strong>
+          <span class="es-sub">Up to 20 MB. It is encrypted before it leaves this device.</span>
+          <input id="es-file" type="file" accept="application/pdf,.pdf" hidden />
+        </label>
+        <div id="es-doc" class="es-row hidden">
+          <i class="ph ph-file-pdf" style="font-size: 1.6rem; color: var(--es-accent)"></i>
+          <div style="flex: 1; min-width: 0">
+            <div id="es-doc-name" style="font-weight: 700; word-break: break-all"></div>
+            <div id="es-doc-info" class="es-sub"></div>
+          </div>
+          <button id="es-doc-change" class="es-btn es-small" type="button">Change</button>
+        </div>
+        <label class="es-label" style="margin-top: 0.9rem">
+          Title
+          <input id="es-title" class="es-input" type="text" maxlength="140" placeholder="What are they signing?" />
+        </label>
+      </section>
+
+      <!-- Step 2 -->
+      <section class="es-card">
+        <h2 class="es-h2"><span class="es-step">2</span> Signers</h2>
+        <div id="es-signers"></div>
+        <div class="es-row" style="margin-top: 0.4rem">
+          <button id="es-add" class="es-btn es-small" type="button"><i class="ph ph-plus"></i> Add signer</button>
+          <button id="es-add-me" class="es-btn es-small" type="button"><i class="ph ph-user"></i> Add me</button>
+          <label class="es-check-row" style="margin-left: auto">
+            <input id="es-ordered" type="checkbox" />
+            Sign in this order
+          </label>
+        </div>
+      </section>
+
+      <!-- Step 3 -->
+      <section class="es-card">
+        <h2 class="es-h2"><span class="es-step">3</span> Fields</h2>
+        <p class="es-sub" style="margin-bottom: 0.8rem">
+          Pick a signer and a field, then tap the page where it goes. Drag to move, pull the
+          corner to resize. Press Esc or tap the field type again to stop placing.
+        </p>
+        <div id="es-tools" class="es-tools">
+          <div id="es-whos" class="es-row"></div>
+          <span class="es-sep"></span>
+          <div class="es-row" id="es-types">
+            <button class="es-tool" data-type="signature" type="button"><i class="ph ph-signature"></i> Signature</button>
+            <button class="es-tool" data-type="initials" type="button"><i class="ph ph-text-aa"></i> Initials</button>
+            <button class="es-tool" data-type="date" type="button"><i class="ph ph-calendar-blank"></i> Date signed</button>
+            <button class="es-tool" data-type="name" type="button"><i class="ph ph-user"></i> Full name</button>
+            <button class="es-tool" data-type="text" type="button"><i class="ph ph-text-t"></i> Text</button>
+            <button class="es-tool" data-type="checkbox" type="button"><i class="ph ph-check-square"></i> Checkbox</button>
+          </div>
+        </div>
+        <div id="es-pages" class="es-pages"><p class="es-sub">Choose a PDF first.</p></div>
+      </section>
+
+      <!-- Step 4 -->
+      <section class="es-card">
+        <h2 class="es-h2"><span class="es-step">4</span> Send</h2>
+        <div style="display: grid; gap: 0.8rem">
+          <label class="es-label">
+            Send from (your email)
+            <input id="es-from" class="es-input" type="email" placeholder="you@example.com" autocomplete="email" />
+            <span class="es-sub" style="font-weight: 400">The invitations go out from this account, through Gmail, Outlook or your email app.</span>
+          </label>
+          <label class="es-label">
+            Your name
+            <input id="es-from-name" class="es-input" type="text" maxlength="80" />
+          </label>
+          <label class="es-label">
+            Message (optional)
+            <textarea id="es-message" class="es-textarea" maxlength="1500" placeholder="Hi, please sign this when you get a chance."></textarea>
+          </label>
+          <div class="es-row">
+            <button id="es-create" class="es-btn es-primary" type="button"><i class="ph ph-paper-plane-tilt"></i> Create signing links</button>
+            <span id="es-create-hint" class="es-sub"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- After creating -->
+      <section id="es-ready" class="es-card hidden">
+        <h2 class="es-h2"><i class="ph ph-envelope-simple"></i> Email each signer their link</h2>
+        <p class="es-sub" style="margin-bottom: 0.8rem">
+          Each person gets their own link, so send one email per signer. Gmail and Outlook open
+          a draft from your account with everything filled in; you just press Send.
+        </p>
+        <div id="es-ready-list" class="es-sendlist"></div>
+        <div class="es-row" style="margin-top: 1rem">
+          <button id="es-new" class="es-btn" type="button"><i class="ph ph-plus"></i> Start another</button>
+        </div>
+      </section>
+    </main>
+
+    <div id="es-busy" class="es-busy hidden"><div class="es-busy-card"><div class="es-spin"></div><span id="es-busy-text">Working...</span></div></div>
+    <div id="es-toast" class="es-toast hidden" role="status" aria-live="polite"></div>
+
+    <div id="alert-modal" class="fixed inset-0 bg-gray-900 bg-opacity-90 flex items-center justify-center z-50 hidden">
+      <div class="bg-gray-800 rounded-lg shadow-xl p-6 max-w-sm w-full border border-gray-700">
+        <h3 id="alert-title" class="text-xl font-bold text-white mb-2">Alert</h3>
+        <p id="alert-message" class="text-gray-300 mb-6"></p>
+        <button id="alert-ok" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200">OK</button>
+      </div>
+    </div>
+    <div id="loader-modal" class="hidden"><div id="loader-text"></div></div>
+
+    {{> footer }}
+    <script type="module" src="/src/js/utils/lucide-init.ts"></script>
+    <script type="module" src="/src/js/utils/full-width.ts"></script>
+    <script type="module" src="/src/js/utils/simple-mode-footer.ts"></script>
+    <script type="module" src="/src/js/logic/kit-esign/request-page.ts"></script>
+    <script type="module" src="/src/js/mobileMenu.ts"></script>
+    <script type="module" src="/src/js/main.ts"></script>
+  </body>
+</html>

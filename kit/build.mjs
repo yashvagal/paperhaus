@@ -307,11 +307,42 @@ const SCAN_TOOL = {
 `,
 };
 
+// Request Signatures: send a PDF to several people, each signs from a private link.
+// The signing page (sign-request) is public, so it is a page of its own without the
+// app's navigation; the API it talks to is functions/api/esign/.
+const SIGN_PDF_ANCHOR = "        subtitle: 'Draw, type, or upload your signature.',\n      },\n";
+const ESIGN_TOOL = {
+  name: 'Request Signatures',
+  dir: join(KIT, 'tools', 'esign'),
+  pages: ['request-signatures', 'sign-request'],
+  files: [
+    ['request-signatures.html', 'src/pages/request-signatures.html'],
+    ['sign-request.html', 'src/pages/sign-request.html'],
+    ['request-page.ts', 'src/js/logic/kit-esign/request-page.ts'],
+    ['sign-page.ts', 'src/js/logic/kit-esign/sign-page.ts'],
+    ['esign-common.ts', 'src/js/logic/kit-esign/esign-common.ts'],
+    ['esign.css', 'src/js/logic/kit-esign/esign.css'],
+  ],
+  // Listed right after Sign PDF, wherever BentoPDF lists it.
+  afterSignPdf: `      {
+        href: import.meta.env.BASE_URL + 'request-signatures.html',
+        name: 'Request Signatures',
+        icon: 'ph-users-three',
+        subtitle: 'Send a PDF to others to sign, each from their own private link.',
+      },
+`,
+};
+
 const VITE_CONFIG = join(ROOT, 'vite.config.ts');
 const TOOLS_CONFIG = join(ROOT, 'src/js/config/tools.ts');
 const VITE_ANCHOR = '          // Tool Pages\n';
 const POPULAR_ANCHOR = "    name: 'Popular Tools',\n    tools: [\n";
 const CATEGORY_ANCHOR = "  {\n    name: 'Edit & Annotate',";
+const KIT_TOOLS = [
+  { ...SCAN_TOOL, name: 'Scan', pages: [SCAN_TOOL.page] },
+  ESIGN_TOOL,
+];
+const KIT_LOGIC_DIRS = ['src/js/logic/kit-scan', 'src/js/logic/kit-esign'];
 
 function installKitTools() {
   const vite = readFileSync(VITE_CONFIG, 'utf8');
@@ -319,8 +350,8 @@ function installKitTools() {
   const undo = () => {
     writeFileSync(VITE_CONFIG, vite);
     writeFileSync(TOOLS_CONFIG, tools);
-    for (const [, dest] of SCAN_TOOL.files) rmSync(join(ROOT, dest), { force: true });
-    rmSync(join(ROOT, 'src/js/logic/kit-scan'), { recursive: true, force: true });
+    for (const tool of KIT_TOOLS) for (const [, dest] of tool.files) rmSync(join(ROOT, dest), { force: true });
+    for (const d of KIT_LOGIC_DIRS) rmSync(join(ROOT, d), { recursive: true, force: true });
   };
   if (vite.includes('[phase0-kit]') || tools.includes('[phase0-kit]')) {
     fail('vite.config.ts or tools.ts still holds changes from an interrupted build. Restore them with: git checkout -- vite.config.ts src/js/config/tools.ts');
@@ -329,24 +360,34 @@ function installKitTools() {
     [VITE_ANCHOR, vite, 'vite.config.ts'],
     [POPULAR_ANCHOR, tools, 'src/js/config/tools.ts'],
     [CATEGORY_ANCHOR, tools, 'src/js/config/tools.ts'],
+    [SIGN_PDF_ANCHOR, tools, 'src/js/config/tools.ts (Sign PDF entry)'],
   ]) {
-    if (!src.includes(anchor)) fail(`BentoPDF changed ${what}, so the kit cannot add the Scan tool. Update the anchors in kit/build.mjs (installKitTools).`);
+    if (!src.includes(anchor)) fail(`BentoPDF changed ${what}, so the kit cannot add its tools. Update the anchors in kit/build.mjs (installKitTools).`);
   }
-  if (existsSync(join(ROOT, 'src/pages', `${SCAN_TOOL.page}.html`))) {
-    fail(`BentoPDF now has its own src/pages/${SCAN_TOOL.page}.html. Rename the kit's Scan page in kit/build.mjs.`);
+  for (const tool of KIT_TOOLS) {
+    for (const page of tool.pages) {
+      if (existsSync(join(ROOT, 'src/pages', `${page}.html`))) {
+        fail(`BentoPDF now has its own src/pages/${page}.html. Rename the kit's ${tool.name} page in kit/build.mjs.`);
+      }
+    }
   }
 
-  for (const [from, dest] of SCAN_TOOL.files) {
-    mkdirSync(dirname(join(ROOT, dest)), { recursive: true });
-    copyFileSync(join(SCAN_TOOL.dir, from), join(ROOT, dest));
+  for (const tool of KIT_TOOLS) {
+    for (const [from, dest] of tool.files) {
+      mkdirSync(dirname(join(ROOT, dest)), { recursive: true });
+      copyFileSync(join(tool.dir, from), join(ROOT, dest));
+    }
   }
+  const inputs = KIT_TOOLS.flatMap((t) => t.pages)
+    .map((page) => `          '${page}': resolve(__dirname, 'src/pages/${page}.html'),\n`)
+    .join('');
   writeFileSync(VITE_CONFIG, vite.replace(VITE_ANCHOR,
-    `${VITE_ANCHOR}          // [phase0-kit] Paperhaus tools (temporary)\n` +
-    `          '${SCAN_TOOL.page}': resolve(__dirname, 'src/pages/${SCAN_TOOL.page}.html'),\n`));
+    `${VITE_ANCHOR}          // [phase0-kit] Paperhaus tools (temporary)\n${inputs}`));
   writeFileSync(TOOLS_CONFIG, tools
     .replace(POPULAR_ANCHOR, `${POPULAR_ANCHOR}      // [phase0-kit]\n${SCAN_TOOL.popular}`)
-    .replace(CATEGORY_ANCHOR, `  // [phase0-kit]\n${SCAN_TOOL.category}${CATEGORY_ANCHOR}`));
-  log('Added the Scan tool (temporary).');
+    .replace(CATEGORY_ANCHOR, `  // [phase0-kit]\n${SCAN_TOOL.category}${CATEGORY_ANCHOR}`)
+    .replaceAll(SIGN_PDF_ANCHOR, `${SIGN_PDF_ANCHOR}      // [phase0-kit]\n${ESIGN_TOOL.afterSignPdf}`));
+  log(`Added the Paperhaus tools (temporary): ${KIT_TOOLS.map((t) => t.name).join(', ')}.`);
   return undo;
 }
 
@@ -433,6 +474,9 @@ function writeHeaders() {
   }
   writeFileSync(join(DIST, '_headers'), text);
   writeFileSync(join(DIST, 'robots.txt'), 'User-agent: *\nDisallow: /\n');
+  // Only the e-sign API runs as a Pages Function. Every other request is served as a
+  // plain file, so it never counts toward the free plan's daily Functions requests.
+  writeFileSync(join(DIST, '_routes.json'), JSON.stringify({ version: 1, include: ['/api/*'], exclude: [] }, null, 2) + '\n');
 }
 
 // The Paperhaus look. kit/theme/base.css is the shared engine; each direction in
@@ -599,6 +643,8 @@ function addPinning(env) {
       } else if (entry.endsWith('.html')) {
         let html = readFileSync(p, 'utf8');
         if (!html.includes('</head>')) continue;
+        // Public pages (the signing page) have no account, so no account chip or pinning.
+        if (html.includes('name="paperhaus-public"')) continue;
         for (const re of strip) html = html.replace(re, '');
         writeFileSync(p, html.replace('</head>', `${tags}</head>`));
         pages++;
