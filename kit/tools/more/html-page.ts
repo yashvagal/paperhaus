@@ -102,7 +102,7 @@ function resolve(u: string, base: string): string | null {
 }
 
 /** Load the page, take out scripts, and inline its stylesheets and pictures. */
-async function preparePage(): Promise<{ html: string; title: string; base: string }> {
+async function preparePage(mode: 'text' | 'picture'): Promise<{ html: string; title: string; base: string }> {
   const urlInput = $<HTMLInputElement>('mt-url').value.trim();
   let raw: string;
   let base: string;
@@ -136,8 +136,9 @@ async function preparePage(): Promise<{ html: string; title: string; base: strin
   // Cookie banners and sticky bars cover the content in a static copy.
   doc.querySelectorAll('[id*="cookie" i],[class*="cookie-banner" i],[class*="consent" i],[id*="consent" i]').forEach((el) => el.remove());
 
-  busy('Getting styles and pictures...');
-  const sheets = Array.from(doc.querySelectorAll<HTMLLinkElement>('link[rel~="stylesheet"]'));
+  if (mode === 'text') readerView(doc, title, base);
+  busy(mode === 'text' ? 'Getting pictures...' : 'Getting styles and pictures...');
+  const sheets = mode === 'text' ? [] : Array.from(doc.querySelectorAll<HTMLLinkElement>('link[rel~="stylesheet"]'));
   for (const link of sheets) {
     const href = resolve(link.getAttribute('href') || '', base);
     const media = link.getAttribute('media') || '';
@@ -150,11 +151,15 @@ async function preparePage(): Promise<{ html: string; title: string; base: strin
     link.replaceWith(style);
   }
   for (const style of Array.from(doc.querySelectorAll('style'))) {
-    if (!local) style.textContent = await inl.cssUrls(style.textContent || '', base);
+    if (mode === 'text') style.remove();
+    else if (!local) style.textContent = await inl.cssUrls(style.textContent || '', base);
   }
   doc.querySelectorAll('link').forEach((l) => l.remove());
 
-  const imgs = Array.from(doc.querySelectorAll<HTMLImageElement>('img'));
+  const all = Array.from(doc.querySelectorAll<HTMLImageElement>('img'));
+  // Tiny icons and tracking pixels add nothing; past 80 pictures, drop the rest.
+  all.slice(80).forEach((im) => im.remove());
+  const imgs = all.slice(0, 80);
   doc.querySelectorAll('picture source').forEach((s) => s.remove());
   let done = 0;
   await Promise.all(
@@ -183,9 +188,20 @@ async function preparePage(): Promise<{ html: string; title: string; base: strin
         if (data) img.setAttribute('src', data);
         else img.remove();
       }
+      // MuPDF reads PNG and JPEG; anything else (SVG, WebP, AVIF) is turned into a PNG here.
+      const cur = img.getAttribute('src') || '';
+      if (mode === 'text' && cur.startsWith('data:') && !/^data:image\/(png|jpe?g)/i.test(cur)) {
+        const png = await toPng(cur);
+        if (png) img.setAttribute('src', png);
+        else img.remove();
+      }
       busy(`Getting pictures... ${++done} of ${imgs.length}`);
     })
   );
+  // Whatever couldn't be inlined would only be blocked by the page's security rules.
+  doc.querySelectorAll('img').forEach((im) => {
+    if (!/^data:/.test(im.getAttribute('src') || '')) im.remove();
+  });
   // Links keep working in the PDF.
   doc.querySelectorAll('a[href]').forEach((a) => {
     const abs = resolve(a.getAttribute('href') || '', base);
@@ -193,13 +209,75 @@ async function preparePage(): Promise<{ html: string; title: string; base: strin
   });
   // Inline style="background:url(...)"
   for (const el of Array.from(doc.querySelectorAll<HTMLElement>('[style*="url("]'))) {
-    if (!local) el.setAttribute('style', await inl.cssUrls(el.getAttribute('style') || '', base));
+    if (mode === 'text') el.removeAttribute('style');
+    else if (!local) el.setAttribute('style', await inl.cssUrls(el.getAttribute('style') || '', base));
   }
   doc.querySelector('base')?.remove();
   const meta = doc.createElement('meta');
   meta.setAttribute('charset', 'utf-8');
   doc.head.prepend(meta);
   return { html: '<!doctype html>\n' + doc.documentElement.outerHTML, title, base };
+}
+
+
+/** Keep the readable part of a page for the text layout: the article, without menus or footers. */
+function readerView(doc: Document, title: string, base: string): void {
+  const pick =
+    doc.querySelector('article') ||
+    doc.querySelector('main') ||
+    doc.querySelector('[role="main"]') ||
+    doc.querySelector('#content, .content, #main, .post, .entry-content') ||
+    doc.body;
+  const keep = pick.cloneNode(true) as HTMLElement;
+  keep
+    .querySelectorAll('nav, footer, aside, form, button, input, select, textarea, svg, canvas, video, audio, [hidden], [aria-hidden="true"], [role="navigation"], [role="banner"], [role="contentinfo"], [style*="display:none"], [style*="display: none"]')
+    .forEach((el) => el.remove());
+  keep.querySelectorAll<HTMLElement>('[style]').forEach((el) => el.removeAttribute('style'));
+  keep.querySelectorAll<HTMLElement>('[class]').forEach((el) => el.removeAttribute('class'));
+  doc.body.textContent = '';
+  const h = doc.createElement('h1');
+  h.textContent = title;
+  const src = doc.createElement('p');
+  src.className = 'ph-src';
+  src.textContent = /^https?:/.test(base) && !base.startsWith(location.origin) ? base : '';
+  if (!keep.querySelector('h1') || keep.querySelector('h1')?.textContent?.trim() !== title) doc.body.append(h);
+  if (src.textContent) doc.body.append(src);
+  doc.body.append(...Array.from(keep.childNodes));
+}
+
+function toPng(src: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const im = new Image();
+    im.onload = () => {
+      const w = Math.min(im.naturalWidth || 300, 1600);
+      const h = Math.round(((im.naturalHeight || 150) * w) / (im.naturalWidth || 300));
+      if (w < 2 || h < 2) return resolve(null);
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      c.getContext('2d')!.drawImage(im, 0, 0, w, h);
+      try {
+        resolve(c.toDataURL('image/png'));
+      } catch {
+        resolve(null);
+      }
+    };
+    im.onerror = () => resolve(null);
+    im.src = src;
+  });
+}
+
+/** True when rows y0..y1 are all one plain color. */
+function blank(ctx: CanvasRenderingContext2D, width: number, y0: number, y1: number): boolean {
+  const h = Math.max(1, Math.floor(y1 - y0));
+  const data = ctx.getImageData(0, Math.floor(y0), width, h).data;
+  const r = data[0];
+  const g = data[1];
+  const b = data[2];
+  for (let i = 0; i < data.length; i += 4 * 7) {
+    if (Math.abs(data[i] - r) + Math.abs(data[i + 1] - g) + Math.abs(data[i + 2] - b) > 24) return false;
+  }
+  return true;
 }
 
 // ------------------------------------------------------------------ making the PDF
@@ -220,7 +298,9 @@ async function asText(html: string): Promise<Uint8Array> {
   };
   busy('Laying out the pages...');
   // MuPDF's paper names take "-l" for landscape.
-  const css = `img{max-width:100%;height:auto} pre,code{white-space:pre-wrap} table{max-width:100%}`;
+  const css = `body{font-family:serif;font-size:11pt;line-height:1.45;color:#111} h1{font-size:20pt;margin:0 0 6pt} h2{font-size:15pt} h3{font-size:12.5pt}
+img{max-width:100%;height:auto} pre,code{font-family:monospace;font-size:9pt;white-space:pre-wrap} table{max-width:100%;border-collapse:collapse}
+td,th{border:0.5pt solid #999;padding:3pt} blockquote{margin-left:12pt;color:#444} a{color:#1a4fb5} .ph-src{font-size:8.5pt;color:#666;margin-bottom:12pt}`;
   const blob = await mupdf.htmlToPdf(html, { pageSize: box.landscape ? `${box.size}-l` : box.size, margins: box.m, css });
   return new Uint8Array(await blob.arrayBuffer());
 }
@@ -272,39 +352,60 @@ async function asPicture(html: string): Promise<Uint8Array> {
     });
     const fullH = Math.min(Math.max(d.documentElement.scrollHeight, d.body?.scrollHeight || 0), 60000);
     frame.style.height = `${fullH}px`;
-    const scale = 2;
-    const canvas = await html2canvas(d.documentElement, {
-      backgroundColor: '#ffffff',
-      scale,
-      width: cssW,
-      height: fullH,
-      windowWidth: cssW,
-      windowHeight: fullH,
-      useCORS: false,
-      logging: false,
-    });
-    busy('Splitting into pages...');
+    // Browsers can't hold a canvas more than about 32,000 px tall, so a long page is
+    // drawn a few pages at a time, each window starting where the last page break fell.
+    const scale = fullH > 20000 ? 1.5 : 2;
     const out = await PDFDocument.create();
     const pageCssH = ((box.h - box.m * 2) / 72) * 96;
     const pagePx = pageCssH * scale;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-    let y = 0;
-    while (y < canvas.height - 2) {
-      let end = Math.min(canvas.height, y + pagePx);
-      if (end < canvas.height) end = Math.max(y + pagePx * 0.7, quietRow(ctx, canvas.width, end, pagePx * 0.25));
-      const slice = document.createElement('canvas');
-      slice.width = canvas.width;
-      slice.height = Math.ceil(end - y);
-      const sctx = slice.getContext('2d')!;
-      sctx.fillStyle = '#fff';
-      sctx.fillRect(0, 0, slice.width, slice.height);
-      sctx.drawImage(canvas, 0, y, canvas.width, slice.height, 0, 0, slice.width, slice.height);
-      const jpg = await out.embedJpg(new Uint8Array(await (await canvasBlob(slice, 'image/jpeg', 0.9)).arrayBuffer()));
-      const page = out.addPage([box.w, box.h]);
-      const drawW = box.w - box.m * 2;
-      const drawH = (slice.height / slice.width) * drawW;
-      page.drawImage(jpg, { x: box.m, y: box.h - box.m - drawH, width: drawW, height: drawH });
-      y = end;
+    const chunkCss = Math.max(pageCssH * 5, 2000);
+    let y0 = 0;
+    let chunkNo = 0;
+    while (y0 < fullH - 2) {
+      const hCss = Math.min(chunkCss, fullH - y0);
+      const last = y0 + hCss >= fullH - 1;
+      busy(`Drawing the page... ${Math.min(99, Math.round((y0 / fullH) * 100))}%`, y0 / fullH);
+      const canvas = await html2canvas(d.documentElement, {
+        backgroundColor: '#ffffff',
+        scale,
+        x: 0,
+        y: y0,
+        width: cssW,
+        height: Math.ceil(hCss),
+        windowWidth: cssW,
+        windowHeight: fullH,
+        scrollX: 0,
+        scrollY: 0,
+        useCORS: false,
+        logging: false,
+      });
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+      let y = 0;
+      while (y < canvas.height - 2) {
+        let end = y + pagePx;
+        if (end >= canvas.height) {
+          if (!last) break; // the rest goes into the next window
+          end = canvas.height;
+        } else end = Math.max(y + pagePx * 0.7, quietRow(ctx, canvas.width, end, pagePx * 0.25));
+        // A last stretch with nothing on it (trailing space) makes no page.
+        if (last && (y > 0 || chunkNo > 0) && blank(ctx, canvas.width, y, canvas.height)) break;
+        const slice = document.createElement('canvas');
+        slice.width = canvas.width;
+        slice.height = Math.ceil(end - y);
+        const sctx = slice.getContext('2d')!;
+        sctx.fillStyle = '#fff';
+        sctx.fillRect(0, 0, slice.width, slice.height);
+        sctx.drawImage(canvas, 0, y, canvas.width, slice.height, 0, 0, slice.width, slice.height);
+        const jpg = await out.embedJpg(new Uint8Array(await (await canvasBlob(slice, 'image/jpeg', 0.9)).arrayBuffer()));
+        const page = out.addPage([box.w, box.h]);
+        const drawW = box.w - box.m * 2;
+        const drawH = (slice.height / slice.width) * drawW;
+        page.drawImage(jpg, { x: box.m, y: box.h - box.m - drawH, width: drawW, height: drawH });
+        y = end;
+      }
+      if (last) break;
+      y0 += Math.max(y / scale, pageCssH * 0.5);
+      chunkNo++;
     }
     return await out.save();
   } finally {
@@ -316,15 +417,15 @@ async function make(): Promise<void> {
   result = null;
   $('mt-preview-card').classList.add('hidden');
   try {
-    const { html, title } = await preparePage();
-    const mode = document.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value;
+    const mode = document.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value === 'picture' ? 'picture' : 'text';
+    const { html, title } = await preparePage(mode);
     let bytes: Uint8Array;
     try {
       bytes = mode === 'picture' ? await asPicture(html) : await asText(html);
     } catch (err) {
       if (mode !== 'picture') {
         console.warn('Text layout failed, using the picture mode', err);
-        bytes = await asPicture(html);
+        bytes = await asPicture((await preparePage('picture')).html);
       } else throw err;
     }
     const name = `${title.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'page'}.pdf`;

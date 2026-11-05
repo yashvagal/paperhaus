@@ -262,7 +262,49 @@ export async function renderPage(page: PdfPage, scale: number, opts: { noText?: 
     ctx.strokeText = () => undefined;
   }
   await page.render({ canvasContext: ctx, viewport: vp, canvas }).promise;
+  if (opts.noText) {
+    // Give the canvas its normal text drawing back for whoever draws on it next.
+    delete (ctx as unknown as Record<string, unknown>).fillText;
+    delete (ctx as unknown as Record<string, unknown>).strokeText;
+  }
   return canvas;
+}
+
+/**
+ * Left edges of each character of a text run, plus its right end (str.length + 1 values),
+ * in page points. pdf.js gives only the whole run's width, so the letters are measured in
+ * a similar font and scaled to fit; far closer than spacing them evenly.
+ */
+const edgeCache = new WeakMap<TextBit, number[]>();
+let measureCtx: CanvasRenderingContext2D | null = null;
+export function charEdges(b: TextBit): number[] {
+  const hit = edgeCache.get(b);
+  if (hit) return hit;
+  measureCtx ||= document.createElement('canvas').getContext('2d')!;
+  const fam = b.family === 'serif' ? '"Times New Roman", Times, serif' : b.family === 'monospace' ? '"Courier New", monospace' : 'Arial, Helvetica, sans-serif';
+  measureCtx.font = `100px ${fam}`;
+  const chars = [...b.str];
+  const widths = chars.map((c) => measureCtx!.measureText(c).width || 50);
+  const total = widths.reduce((a, w) => a + w, 0) || 1;
+  const out = [b.x];
+  let acc = 0;
+  for (const w of widths) {
+    acc += w;
+    out.push(b.x + (acc / total) * b.w);
+  }
+  // Characters outside the BMP count as one; map back to UTF-16 indexes.
+  if (chars.length !== b.str.length) {
+    const byUnit: number[] = [];
+    chars.forEach((c, i) => {
+      byUnit.push(out[i]);
+      if (c.length === 2) byUnit.push(out[i]);
+    });
+    byUnit.push(out[out.length - 1]);
+    edgeCache.set(b, byUnit);
+    return byUnit;
+  }
+  edgeCache.set(b, out);
+  return out;
 }
 
 export function canvasBlob(c: HTMLCanvasElement, type = 'image/jpeg', q = 0.88): Promise<Blob> {

@@ -13,6 +13,7 @@ import {
   baseName,
   busy,
   canvasBlob,
+  charEdges,
   download,
   escapeHtml,
   onReady,
@@ -165,9 +166,11 @@ function boxesFor(p: PageInfo, start: number, end: number): Rect[] {
   let cur: { bit: TextBit; a: number; b: number } | null = null;
   const flush = () => {
     if (!cur) return;
-    const len = cur.bit.str.length || 1;
-    const x0 = cur.bit.x + (cur.bit.w * cur.a) / len;
-    const x1 = cur.bit.x + (cur.bit.w * (cur.b + 1)) / len;
+    const e = charEdges(cur.bit);
+    // Half a letter of extra room on each side covers the small error in the estimate.
+    const pad = cur.bit.h * 0.22;
+    const x0 = e[cur.a] - pad;
+    const x1 = e[cur.b + 1] + pad;
     const last = out[out.length - 1];
     // Turned text: cover the whole run, since its letters don't run left to right.
     const r = cur.bit.angle ? { x: cur.bit.x, y: cur.bit.y, w: cur.bit.w, h: cur.bit.h } : { x: x0, y: cur.bit.y, w: x1 - x0, h: cur.bit.h };
@@ -196,7 +199,7 @@ function boxesFor(p: PageInfo, start: number, end: number): Rect[] {
   }
   flush();
   // A little padding so the edges of letters are covered too.
-  return out.map((r) => ({ x: r.x - 1, y: r.y - 0.5, w: r.w + 2, h: r.h + 1 }));
+  return out.map((r) => ({ x: r.x, y: r.y - 0.5, w: r.w, h: r.h + 1 }));
 }
 
 function find(re: RegExp, source: string, check?: (s: string) => boolean): number {
@@ -441,16 +444,17 @@ async function apply(): Promise<void> {
           const t = encodable(font, run).replace(/\s+$/, '');
           if (t.trim()) {
             const size = Math.max(1, b.h / 1.12);
-            const x = b.x + (b.w * runStart) / len;
-            const wanted = (b.w * (endIdx - runStart)) / len;
+            const ee = charEdges(b);
+            const x = ee[runStart];
+            const wanted = ee[endIdx] - ee[runStart];
             const natural = font.widthOfTextAtSize(t, size) || 1;
             np.drawText(t, { x, y: info.h - (b.y + b.h * 0.82), size: Math.max(1, Math.min(size, size * (wanted / natural) * 1.02)), font, opacity: 0 });
           }
           run = '';
         };
+        const e = charEdges(b);
         for (let c = 0; c < len; c++) {
-          const cx = b.x + (b.w * c) / len;
-          const cr = { x: cx, y: b.y, w: b.w / len, h: b.h };
+          const cr = { x: e[c], y: b.y, w: Math.max(0.01, e[c + 1] - e[c]), h: b.h };
           const hidden = rects.some((r) => hit(cr, r));
           if (hidden) {
             if (run) flush(c);
@@ -519,8 +523,9 @@ function boxesText(p: PageInfo, r: Rect): string {
       if (hit(b, r)) s += b.str;
       continue;
     }
+    const e = charEdges(b);
     for (let c = 0; c < len; c++) {
-      const cr = { x: b.x + (b.w * (c + 0.5)) / len, y: b.y + b.h / 2, w: 0.01, h: 0.01 };
+      const cr = { x: (e[c] + e[c + 1]) / 2, y: b.y + b.h / 2, w: 0.01, h: 0.01 };
       if (hit(cr, r)) s += b.str[c];
     }
   }
