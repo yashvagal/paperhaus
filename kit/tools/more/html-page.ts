@@ -6,7 +6,7 @@
 import html2canvas from 'html2canvas';
 import { PDFDocument } from 'pdf-lib';
 import { loadPyMuPDF } from '../../utils/pymupdf-loader.js';
-import { $, alertBox, backToTools, baseName, busy, canvasBlob, download, onReady, openPdf, thumb } from './more-common.js';
+import { $, alertBox, backToTools, baseName, busy, canvasBlob, download, onReady, openPdf, thumb, toast } from './more-common.js';
 
 const BUDGET = 12 * 1024 * 1024; // everything inlined into one page
 const SIZES: Record<string, [number, number]> = { letter: [612, 792], a4: [595.28, 841.89], legal: [612, 1008] };
@@ -350,63 +350,51 @@ async function asPicture(html: string): Promise<Uint8Array> {
       const pos = getComputedStyle(el).position;
       if (pos === 'fixed' || pos === 'sticky') el.style.position = 'static';
     });
-    const fullH = Math.min(Math.max(d.documentElement.scrollHeight, d.body?.scrollHeight || 0), 60000);
+    const realH = Math.max(d.documentElement.scrollHeight, d.body?.scrollHeight || 0);
+    const fullH = Math.min(realH, 30000);
+    const cut = realH > fullH;
     frame.style.height = `${fullH}px`;
-    // Browsers can't hold a canvas more than about 32,000 px tall, so a long page is
-    // drawn a few pages at a time, each window starting where the last page break fell.
-    const scale = fullH > 20000 ? 1.5 : 2;
+    // Browsers can't hold a canvas much more than 32,000 px tall, so a very long page is
+    // drawn at a lower scale (and cut off past about 30 pages). One drawing pass only:
+    // each pass copies the whole page, which is slow on big sites.
+    const scale = Math.max(1, Math.min(2, 30000 / fullH));
+    busy(fullH > 8000 ? 'Drawing a long page, this can take a minute...' : 'Drawing the page...');
+    const canvas = await html2canvas(d.documentElement, {
+      backgroundColor: '#ffffff',
+      scale,
+      width: cssW,
+      height: fullH,
+      windowWidth: cssW,
+      windowHeight: fullH,
+      useCORS: false,
+      logging: false,
+    });
+    busy('Splitting into pages...');
     const out = await PDFDocument.create();
     const pageCssH = ((box.h - box.m * 2) / 72) * 96;
     const pagePx = pageCssH * scale;
-    const chunkCss = Math.max(pageCssH * 5, 2000);
-    let y0 = 0;
-    let chunkNo = 0;
-    while (y0 < fullH - 2) {
-      const hCss = Math.min(chunkCss, fullH - y0);
-      const last = y0 + hCss >= fullH - 1;
-      busy(`Drawing the page... ${Math.min(99, Math.round((y0 / fullH) * 100))}%`, y0 / fullH);
-      const canvas = await html2canvas(d.documentElement, {
-        backgroundColor: '#ffffff',
-        scale,
-        x: 0,
-        y: y0,
-        width: cssW,
-        height: Math.ceil(hCss),
-        windowWidth: cssW,
-        windowHeight: fullH,
-        scrollX: 0,
-        scrollY: 0,
-        useCORS: false,
-        logging: false,
-      });
-      const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-      let y = 0;
-      while (y < canvas.height - 2) {
-        let end = y + pagePx;
-        if (end >= canvas.height) {
-          if (!last) break; // the rest goes into the next window
-          end = canvas.height;
-        } else end = Math.max(y + pagePx * 0.7, quietRow(ctx, canvas.width, end, pagePx * 0.25));
-        // A last stretch with nothing on it (trailing space) makes no page.
-        if (last && (y > 0 || chunkNo > 0) && blank(ctx, canvas.width, y, canvas.height)) break;
-        const slice = document.createElement('canvas');
-        slice.width = canvas.width;
-        slice.height = Math.ceil(end - y);
-        const sctx = slice.getContext('2d')!;
-        sctx.fillStyle = '#fff';
-        sctx.fillRect(0, 0, slice.width, slice.height);
-        sctx.drawImage(canvas, 0, y, canvas.width, slice.height, 0, 0, slice.width, slice.height);
-        const jpg = await out.embedJpg(new Uint8Array(await (await canvasBlob(slice, 'image/jpeg', 0.9)).arrayBuffer()));
-        const page = out.addPage([box.w, box.h]);
-        const drawW = box.w - box.m * 2;
-        const drawH = (slice.height / slice.width) * drawW;
-        page.drawImage(jpg, { x: box.m, y: box.h - box.m - drawH, width: drawW, height: drawH });
-        y = end;
-      }
-      if (last) break;
-      y0 += Math.max(y / scale, pageCssH * 0.5);
-      chunkNo++;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+    let y = 0;
+    while (y < canvas.height - 2) {
+      let end = Math.min(canvas.height, y + pagePx);
+      if (end < canvas.height) end = Math.max(y + pagePx * 0.7, quietRow(ctx, canvas.width, end, pagePx * 0.25));
+      // A last stretch with nothing on it (trailing space) makes no page.
+      if (y > 0 && blank(ctx, canvas.width, y, canvas.height)) break;
+      const slice = document.createElement('canvas');
+      slice.width = canvas.width;
+      slice.height = Math.ceil(end - y);
+      const sctx = slice.getContext('2d')!;
+      sctx.fillStyle = '#fff';
+      sctx.fillRect(0, 0, slice.width, slice.height);
+      sctx.drawImage(canvas, 0, y, canvas.width, slice.height, 0, 0, slice.width, slice.height);
+      const jpg = await out.embedJpg(new Uint8Array(await (await canvasBlob(slice, 'image/jpeg', 0.9)).arrayBuffer()));
+      const page = out.addPage([box.w, box.h]);
+      const drawW = box.w - box.m * 2;
+      const drawH = (slice.height / slice.width) * drawW;
+      page.drawImage(jpg, { x: box.m, y: box.h - box.m - drawH, width: drawW, height: drawH });
+      y = end;
     }
+    if (cut) toast('Exact look keeps the first part of very long pages. Use Selectable text for all of it.');
     return await out.save();
   } finally {
     frame.remove();
