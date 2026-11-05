@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Translate PDF | BentoPDF</title>
+    <meta name="description" content="Translate a PDF and keep its layout, with the translator built into Chrome on your computer." />
+    <link rel="canonical" href="https://www.bentopdf.com/translate-pdf" />
+    <link href="/src/css/styles.css" rel="stylesheet" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/images/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/images/favicon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  </head>
+
+  <body class="antialiased bg-gray-900">
+    {{> navbar }}
+
+    <main class="es-wrap">
+      <button id="back-to-tools" class="flex items-center gap-2 text-indigo-300 hover:text-indigo-400 mb-4 font-semibold">
+        <i data-lucide="arrow-left" class="cursor-pointer"></i>
+        <span class="cursor-pointer">Back to Tools</span>
+      </button>
+      <h1 class="es-h1">Translate PDF</h1>
+      <p class="es-sub" style="margin-top: 0.4rem; max-width: 42rem">
+        Translate a PDF and keep its layout. Translation runs with the translator built into
+        Chrome on this computer, so the document never leaves it.
+      </p>
+      <div id="mt-ai-note" class="es-note hidden" style="margin-top: 1rem"></div>
+
+      <section class="es-card" style="margin-top: 1.2rem">
+        <label id="mt-drop" class="es-drop" for="mt-file">
+          <i class="ph ph-file-pdf"></i>
+          <strong>Choose a PDF or drop it here</strong>
+          <input id="mt-file" type="file" accept="application/pdf,.pdf" hidden />
+        </label>
+        <div id="mt-doc" class="es-row hidden">
+          <i class="ph ph-file-pdf" style="font-size: 1.6rem; color: var(--es-accent)"></i>
+          <div style="flex: 1; min-width: 0">
+            <div id="mt-name" style="font-weight: 700; word-break: break-all"></div>
+            <div id="mt-info" class="es-sub"></div>
+          </div>
+          <button id="mt-change" class="es-btn es-small" type="button">Change</button>
+        </div>
+      </section>
+
+      <section class="es-card">
+        <div class="mt-opts">
+          <div class="es-row" style="gap: 1rem; align-items: flex-end">
+            <label class="es-label">From
+              <select id="mt-from" class="mt-select"><option value="auto">Detect the language</option></select>
+            </label>
+            <label class="es-label">To
+              <select id="mt-to" class="mt-select"></select>
+            </label>
+          </div>
+          <div>
+            <div class="mt-opt-title">Output</div>
+            <div class="mt-seg">
+              <label><input type="radio" name="out" value="layout" checked /><span>Same layout PDF<small>Translation drawn where the text was</small></span></label>
+              <label><input type="radio" name="out" value="text" /><span>Translated text<small>A .txt file, page by page</small></span></label>
+            </div>
+          </div>
+          <div class="es-row">
+            <button id="mt-go" class="es-btn es-primary" type="button" disabled><i class="ph ph-translate"></i> Translate</button>
+            <span id="mt-hint" class="es-sub"></span>
+          </div>
+        </div>
+      </section>
+
+      <section id="mt-result" class="es-card hidden">
+        <h2 class="es-h2">Done</h2>
+        <div id="mt-preview" class="mt-grid"></div>
+        <div class="es-row" style="margin-top: 1rem">
+          <button id="mt-save" class="es-btn es-primary" type="button"><i class="ph ph-download-simple"></i> Download</button>
+        </div>
+      </section>
+    </main>
+
+    <div id="mt-busy" class="es-busy hidden"><div class="es-busy-card"><div class="es-spin"></div><span id="mt-busy-text">Working...</span><div id="mt-busy-bar" class="mt-bar hidden"></div></div></div>
+    <div id="mt-toast" class="es-toast hidden" role="status" aria-live="polite"></div>
+    <div id="alert-modal" class="hidden"><div id="alert-title"></div><div id="alert-message"></div><button id="alert-ok"></button></div>
+    <div id="loader-modal" class="hidden"><div id="loader-text"></div></div>
+
+    {{> footer }}
+    <script type="module" src="/src/js/utils/lucide-init.ts"></script>
+    <script type="module" src="/src/js/utils/full-width.ts"></script>
+    <script type="module" src="/src/js/utils/simple-mode-footer.ts"></script>
+    <script type="module" src="/src/js/logic/kit-more/translate-page.ts"></script>
+    <script type="module" src="/src/js/mobileMenu.ts"></script>
+    <script type="module" src="/src/js/main.ts"></script>
+  </body>
+</html>

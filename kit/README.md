@@ -11,6 +11,7 @@ What it does on every build:
 - Uses BentoPDF's clean "simple mode": only the tools, no marketing pages.
 - Adds Paperhaus's own **Scan** tool, a CamScanner-style scanner (see "Scan" below).
 - Adds **Request Signatures**: send a PDF to several people and get it back signed by all of them, with a signing certificate (see "Request Signatures" below).
+- Adds **PDF to PowerPoint**, **HTML to PDF**, **Redact PDF**, **Summarize PDF** and **Translate PDF**, the tools iLovePDF has that BentoPDF lacks (see "More tools" below).
 - Lets you pin Paperhaus to your dock, taskbar or phone home screen straight from the browser (no app store), and shows who is signed in (see "Pin it and stay signed in" below).
 - Serves every engine from your own site instead of public CDNs. That covers PyMuPDF, Ghostscript, CoherentPDF, the Tesseract OCR engine with its language data and fonts, LibreOffice for Office files, and OpenCV for scanning. The site loads nothing from third parties.
 - Splits LibreOffice's two large files (28 MB and 48 MB) into pieces under Cloudflare's 25 MiB per-file limit, and temporarily patches the loader to put them back together in the browser.
@@ -150,6 +151,22 @@ The pieces: `kit/tools/esign/` (the two pages and their code) and `functions/api
 
 ---
 
+## More tools
+
+Five tools fill the gaps against iLovePDF's list. They were written for Paperhaus from its own spec; see `kit/PROVENANCE.md`. All run in the browser. The one exception is HTML to PDF, which fetches web pages through a small function that only signed-in people can use.
+
+| Tool | Where | What it does |
+| --- | --- | --- |
+| PDF to PowerPoint | Convert from PDF | One slide per page. **Editable text** puts text boxes, with the original colors, sizes and bold, over the page background with its words taken out. **Pictures** keeps the exact look. The page text goes into the speaker notes. Pages with turned text stay pictures. |
+| HTML to PDF | Convert to PDF | Paste a web address or choose an .html file. **Selectable text** lays the page out with MuPDF. **Exact look** draws it as the browser shows it, split into pages at blank rows. Scripts don't run, so pages that build themselves with JavaScript, or that need a login, come out empty. |
+| Redact PDF | Secure PDF, Popular Tools | Find words (match case, whole words) and patterns: emails, phone numbers, SSNs, card numbers (checked with the Luhn test) and dates. Draw boxes anywhere, and tap a match to skip it. Each redacted page is rebuilt as a 200 dpi picture with black boxes, and the words outside the boxes go back as invisible text, so search still works. Paperhaus then reads the file back to check that nothing redacted can be found. It can also remove document info, attachments and comments. |
+| Summarize PDF | AI on this device | Key points, a short summary or one line, in three lengths. Long files are summarized in parts, then together, with an optional summary per part. Uses Chrome's built-in Summarizer (Gemini Nano on the computer). |
+| Translate PDF | AI on this device | Detects the language. **Same layout** redraws each page without its words and paints the translation into each block. It's drawn as a picture, so Hindi, Marathi, Arabic and Chinese all show correctly. **Translated text** saves a .txt. Uses Chrome's built-in Translator. |
+
+Summarize and Translate need Google Chrome 138 or newer on a computer, not a phone. Summaries also need about 22 GB free for Chrome's model, which downloads once. Elsewhere the pages say so. Summarize then offers **Copy text for Claude**.
+
+---
+
 ## Pin it and stay signed in
 
 Paperhaus is not an App Store or Play Store app. It's your website, pinned so it opens in its own window like an app, with nothing to install or update.
@@ -275,6 +292,8 @@ BentoPDF's own build regenerates a few tracked files (blog pages, a partial, a h
 - **Certificate signatures:** the Digital Signature tool works with your own certificate file. Fetching a certificate's issuer chain or a trusted timestamp needs outside servers, which the security policy blocks. Self-signed certificates and the regular Sign PDF tool are unaffected.
 - **OCR languages:** only the languages in `OCR_LANGUAGES` are offered, in OCR PDF and in Scan.
 - **Scan edge detection:** works best with a page on a darker or contrasting surface. On a white desk, or with a dark band at the page edge, drag the corners into place.
+- **Summarize and Translate PDF:** they need desktop Chrome's built-in AI. Translated "same layout" pages are pictures, so their text can't be selected; use **Translated text** to get it as text.
+- **HTML to PDF:** no JavaScript runs, so app-like pages may be blank. Pages behind a login can't be fetched.
 - **Request Signatures:** these are electronic signatures with an audit certificate, like typical e-sign services, not certificate-based digital signatures. For a certificate signature on top, run the finished PDF through Digital Signature. Requests last 14 days.
 - **App icons:** the home screen and dock icons come from `kit/brand/icons/`. A custom `BRAND_LOGO` changes the logo in the header and browser tab, not those icons.
 - **Search engines:** the site sends `noindex` and its `robots.txt` blocks crawlers, so it stays unlisted.

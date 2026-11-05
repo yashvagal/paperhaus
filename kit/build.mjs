@@ -333,6 +333,53 @@ const ESIGN_TOOL = {
 `,
 };
 
+// Tools added to match iLovePDF's list (written for Paperhaus from its own spec, see
+// kit/PROVENANCE.md): PDF to PowerPoint, HTML to PDF, Redact PDF, Summarize PDF and
+// Translate PDF. HTML to PDF fetches pages through functions/api/fetch.js.
+const entry = (page, name, icon, subtitle) => `      {
+        href: import.meta.env.BASE_URL + '${page}.html',
+        name: '${name}',
+        icon: '${icon}',
+        subtitle: '${subtitle}',
+      },
+`;
+const categoryAnchor = (name) => `    name: '${name}',\n    tools: [\n`;
+const MORE_TOOL = {
+  name: 'PowerPoint, HTML, Redact, Summarize, Translate',
+  dir: join(KIT, 'tools', 'more'),
+  pages: ['pdf-to-powerpoint', 'html-to-pdf', 'redact-pdf', 'summarize-pdf', 'translate-pdf'],
+  files: [
+    ['pdf-to-powerpoint.html', 'src/pages/pdf-to-powerpoint.html'],
+    ['html-to-pdf.html', 'src/pages/html-to-pdf.html'],
+    ['redact-pdf.html', 'src/pages/redact-pdf.html'],
+    ['summarize-pdf.html', 'src/pages/summarize-pdf.html'],
+    ['translate-pdf.html', 'src/pages/translate-pdf.html'],
+    ['more-common.ts', 'src/js/logic/kit-more/more-common.ts'],
+    ['more.css', 'src/js/logic/kit-more/more.css'],
+    ['pptx-page.ts', 'src/js/logic/kit-more/pptx-page.ts'],
+    ['html-page.ts', 'src/js/logic/kit-more/html-page.ts'],
+    ['redact-page.ts', 'src/js/logic/kit-more/redact-page.ts'],
+    ['summarize-page.ts', 'src/js/logic/kit-more/summarize-page.ts'],
+    ['translate-page.ts', 'src/js/logic/kit-more/translate-page.ts'],
+  ],
+  // [where, what]: each entry goes first in that existing category.
+  inserts: [
+    ['Popular Tools', entry('redact-pdf', 'Redact PDF', 'ph-eraser', 'Black out words, numbers and areas for good.')],
+    ['Convert from PDF', entry('pdf-to-powerpoint', 'PDF to PowerPoint', 'ph-presentation-chart', 'Each page as a slide, with editable text or as pictures.')],
+    ['Convert to PDF', entry('html-to-pdf', 'HTML to PDF', 'ph-file-html', 'Turn a web page or an HTML file into a PDF.')],
+    ['Secure PDF', entry('redact-pdf', 'Redact PDF', 'ph-eraser', 'Find and black out names, emails, numbers and areas for good.')],
+  ],
+  // A category of its own, before Edit & Annotate.
+  category: `  {
+    name: 'AI on this device',
+    tools: [
+${entry('summarize-pdf', 'Summarize PDF', 'ph-sparkle', 'Key points of a PDF, written by the AI built into Chrome.')}${entry('translate-pdf', 'Translate PDF', 'ph-translate', 'Translate a PDF and keep its layout, right in Chrome.')}    ],
+  },
+`,
+  // npm packages the tools need that BentoPDF does not ship (installed without saving).
+  packages: ['pptxgenjs@3.12.0'],
+};
+
 const VITE_CONFIG = join(ROOT, 'vite.config.ts');
 const TOOLS_CONFIG = join(ROOT, 'src/js/config/tools.ts');
 const VITE_ANCHOR = '          // Tool Pages\n';
@@ -341,8 +388,9 @@ const CATEGORY_ANCHOR = "  {\n    name: 'Edit & Annotate',";
 const KIT_TOOLS = [
   { ...SCAN_TOOL, name: 'Scan', pages: [SCAN_TOOL.page] },
   ESIGN_TOOL,
+  MORE_TOOL,
 ];
-const KIT_LOGIC_DIRS = ['src/js/logic/kit-scan', 'src/js/logic/kit-esign'];
+const KIT_LOGIC_DIRS = ['src/js/logic/kit-scan', 'src/js/logic/kit-esign', 'src/js/logic/kit-more'];
 
 function installKitTools() {
   const vite = readFileSync(VITE_CONFIG, 'utf8');
@@ -361,6 +409,7 @@ function installKitTools() {
     [POPULAR_ANCHOR, tools, 'src/js/config/tools.ts'],
     [CATEGORY_ANCHOR, tools, 'src/js/config/tools.ts'],
     [SIGN_PDF_ANCHOR, tools, 'src/js/config/tools.ts (Sign PDF entry)'],
+    ...MORE_TOOL.inserts.map(([cat]) => [categoryAnchor(cat), tools, `src/js/config/tools.ts (${cat} category)`]),
   ]) {
     if (!src.includes(anchor)) fail(`BentoPDF changed ${what}, so the kit cannot add its tools. Update the anchors in kit/build.mjs (installKitTools).`);
   }
@@ -383,12 +432,31 @@ function installKitTools() {
     .join('');
   writeFileSync(VITE_CONFIG, vite.replace(VITE_ANCHOR,
     `${VITE_ANCHOR}          // [phase0-kit] Paperhaus tools (temporary)\n${inputs}`));
-  writeFileSync(TOOLS_CONFIG, tools
+  let next = tools
     .replace(POPULAR_ANCHOR, `${POPULAR_ANCHOR}      // [phase0-kit]\n${SCAN_TOOL.popular}`)
-    .replace(CATEGORY_ANCHOR, `  // [phase0-kit]\n${SCAN_TOOL.category}${CATEGORY_ANCHOR}`)
-    .replaceAll(SIGN_PDF_ANCHOR, `${SIGN_PDF_ANCHOR}      // [phase0-kit]\n${ESIGN_TOOL.afterSignPdf}`));
+    .replace(CATEGORY_ANCHOR, `  // [phase0-kit]\n${SCAN_TOOL.category}${MORE_TOOL.category}${CATEGORY_ANCHOR}`)
+    .replaceAll(SIGN_PDF_ANCHOR, `${SIGN_PDF_ANCHOR}      // [phase0-kit]\n${ESIGN_TOOL.afterSignPdf}`);
+  for (const [cat, item] of MORE_TOOL.inserts) {
+    const a = categoryAnchor(cat);
+    // In Popular Tools, Scan stays first.
+    if (cat === 'Popular Tools') next = next.replace(SCAN_TOOL.popular, `${SCAN_TOOL.popular}${item}`);
+    else next = next.replace(a, `${a}      // [phase0-kit]\n${item}`);
+  }
+  writeFileSync(TOOLS_CONFIG, next);
+  ensureKitPackages();
   log(`Added the Paperhaus tools (temporary): ${KIT_TOOLS.map((t) => t.name).join(', ')}.`);
   return undo;
+}
+
+/** Install the extra npm packages the kit's tools import, without touching package.json. */
+function ensureKitPackages() {
+  const missing = KIT_TOOLS.flatMap((t) => t.packages || []).filter((spec) => {
+    const name = spec.replace(/@[^@/]+$/, '');
+    return !existsSync(join(ROOT, 'node_modules', name, 'package.json'));
+  });
+  if (!missing.length) return;
+  log(`Installing for the Paperhaus tools: ${missing.join(', ')}`);
+  run('npm', ['install', '--no-save', '--no-audit', '--no-fund', '--ignore-scripts', ...missing]);
 }
 
 function installKitToolAssets(target) {

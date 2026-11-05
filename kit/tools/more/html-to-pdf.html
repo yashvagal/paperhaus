@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>HTML to PDF | BentoPDF</title>
+    <meta name="description" content="Turn a web page or an HTML file into a PDF, with selectable text or as an exact picture." />
+    <link rel="canonical" href="https://www.bentopdf.com/html-to-pdf" />
+    <link href="/src/css/styles.css" rel="stylesheet" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/images/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/images/favicon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  </head>
+
+  <body class="antialiased bg-gray-900">
+    {{> navbar }}
+
+    <main class="es-wrap">
+      <button id="back-to-tools" class="flex items-center gap-2 text-indigo-300 hover:text-indigo-400 mb-4 font-semibold">
+        <i data-lucide="arrow-left" class="cursor-pointer"></i>
+        <span class="cursor-pointer">Back to Tools</span>
+      </button>
+      <h1 class="es-h1">HTML to PDF</h1>
+      <p class="es-sub" style="margin-top: 0.4rem; max-width: 42rem">
+        Paste a web address or choose an HTML file. Get it as a PDF with selectable text, or as
+        an exact picture of the page. Pages that only work after signing in, or that build
+        themselves with JavaScript, may come out empty.
+      </p>
+
+      <section class="es-card" style="margin-top: 1.2rem">
+        <label class="es-label">
+          Web address
+          <div class="es-row" style="flex-wrap: nowrap">
+            <input id="mt-url" class="es-input" type="url" inputmode="url" placeholder="https://example.com/article" autocomplete="url" style="flex: 1; min-width: 0" />
+          </div>
+        </label>
+        <div class="es-sub" style="margin: 0.8rem 0">or</div>
+        <label id="mt-drop" class="es-drop" for="mt-file" style="padding-block: 1.2rem">
+          <i class="ph ph-file-html"></i>
+          <strong id="mt-file-label">Choose an HTML file or drop it here</strong>
+          <span class="es-sub">.html or .htm</span>
+          <input id="mt-file" type="file" accept=".html,.htm,text/html" hidden />
+        </label>
+      </section>
+
+      <section class="es-card">
+        <div class="mt-opts">
+          <div>
+            <div class="mt-opt-title">Output</div>
+            <div class="mt-seg">
+              <label><input type="radio" name="mode" value="text" checked /><span>Selectable text<small>Best for articles and documents</small></span></label>
+              <label><input type="radio" name="mode" value="picture" /><span>Exact look<small>Like a screenshot, split into pages</small></span></label>
+            </div>
+          </div>
+          <div class="es-row" style="gap: 1rem; align-items: flex-end">
+            <label class="es-label">Page size
+              <select id="mt-size" class="mt-select"><option value="letter">Letter</option><option value="a4">A4</option><option value="legal">Legal</option></select>
+            </label>
+            <label class="es-label">Orientation
+              <select id="mt-orient" class="mt-select"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select>
+            </label>
+            <label class="es-label">Margins
+              <select id="mt-margin" class="mt-select"><option value="36">Normal</option><option value="18">Small</option><option value="0">None</option></select>
+            </label>
+          </div>
+          <div class="es-row">
+            <button id="mt-go" class="es-btn es-primary" type="button"><i class="ph ph-file-pdf"></i> Make PDF</button>
+            <span id="mt-hint" class="es-sub"></span>
+          </div>
+        </div>
+      </section>
+
+      <section id="mt-preview-card" class="es-card hidden">
+        <h2 class="es-h2">Preview</h2>
+        <div id="mt-preview" class="mt-grid"></div>
+        <div class="es-row" style="margin-top: 1rem">
+          <button id="mt-save" class="es-btn es-primary" type="button"><i class="ph ph-download-simple"></i> Download PDF</button>
+        </div>
+      </section>
+    </main>
+
+    <div id="mt-busy" class="es-busy hidden"><div class="es-busy-card"><div class="es-spin"></div><span id="mt-busy-text">Working...</span><div id="mt-busy-bar" class="mt-bar hidden"></div></div></div>
+    <div id="mt-toast" class="es-toast hidden" role="status" aria-live="polite"></div>
+    <div id="alert-modal" class="hidden"><div id="alert-title"></div><div id="alert-message"></div><button id="alert-ok"></button></div>
+    <div id="loader-modal" class="hidden"><div id="loader-text"></div></div>
+
+    {{> footer }}
+    <script type="module" src="/src/js/utils/lucide-init.ts"></script>
+    <script type="module" src="/src/js/utils/full-width.ts"></script>
+    <script type="module" src="/src/js/utils/simple-mode-footer.ts"></script>
+    <script type="module" src="/src/js/logic/kit-more/html-page.ts"></script>
+    <script type="module" src="/src/js/mobileMenu.ts"></script>
+    <script type="module" src="/src/js/main.ts"></script>
+  </body>
+</html>
