@@ -294,7 +294,7 @@ BentoPDF's own build regenerates a few tracked files (blog pages, a partial, a h
 - **OCR languages:** only the languages in `OCR_LANGUAGES` are offered, in OCR PDF and in Scan.
 - **Scan edge detection:** works best with a page on a darker or contrasting surface. On a white desk, or with a dark band at the page edge, drag the corners into place.
 - **Summarize and Translate PDF:** they need desktop Chrome's built-in AI. Translated "same layout" pages are pictures, so their text can't be selected; use **Translated text** to get it as text.
-- **HTML to PDF:** no JavaScript runs, so app-like pages may be blank. Pages behind a login can't be fetched.
+- **HTML to PDF:** no JavaScript runs, so app-like pages may be blank. Pages behind a login can't be fetched. Links in Selectable text PDFs are not clickable yet.
 - **Request Signatures:** these are electronic signatures with an audit certificate, like typical e-sign services, not certificate-based digital signatures. For a certificate signature on top, run the finished PDF through Digital Signature. Requests last 14 days.
 - **App icons:** the home screen and dock icons come from `kit/brand/icons/`. A custom `BRAND_LOGO` changes the logo in the header and browser tab, not those icons.
 - **Search engines:** the site sends `noindex` and its `robots.txt` blocks crawlers, so it stays unlisted.
