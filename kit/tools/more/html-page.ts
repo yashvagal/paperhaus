@@ -223,6 +223,8 @@ async function preparePage(mode: 'text' | 'picture'): Promise<{ html: string; ti
 /** Keep the readable part of a page for the text layout: the article, without menus or footers. */
 function readerView(doc: Document, title: string, base: string): void {
   const pick =
+    doc.querySelector('[itemprop="articleBody"]') ||
+    doc.querySelector('.mw-parser-output') ||
     doc.querySelector('article') ||
     doc.querySelector('main') ||
     doc.querySelector('[role="main"]') ||
@@ -230,7 +232,9 @@ function readerView(doc: Document, title: string, base: string): void {
     doc.body;
   const keep = pick.cloneNode(true) as HTMLElement;
   keep
-    .querySelectorAll('nav, footer, aside, form, button, input, select, textarea, svg, canvas, video, audio, [hidden], [aria-hidden="true"], [role="navigation"], [role="banner"], [role="contentinfo"], [style*="display:none"], [style*="display: none"]')
+    .querySelectorAll(
+      'nav, footer, aside, form, button, input, select, textarea, svg, canvas, video, audio, dialog, [hidden], [aria-hidden="true"], [role="navigation"], [role="banner"], [role="contentinfo"], [role="dialog"], [style*="display:none"], [style*="display: none"], .noprint, .mw-editsection, .navbox, .metadata, [class*="dropdown"], [class*="language-list"], [class*="share"], [class*="newsletter"], [class*="related"], [class*="advert"], [id*="language"]'
+    )
     .forEach((el) => el.remove());
   keep.querySelectorAll<HTMLElement>('[style]').forEach((el) => el.removeAttribute('style'));
   keep.querySelectorAll<HTMLElement>('table, td, th, col, div').forEach((el) => {
