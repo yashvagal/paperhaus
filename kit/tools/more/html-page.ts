@@ -334,9 +334,16 @@ while more and pages < 400 and empty < 3:
     story.draw(dev)
     writer.end_page()
     pages += 1
-    empty = empty + 1 if filled.is_empty else 0
+    empty = empty + 1 if pymupdf.Rect(filled).is_empty else 0
 writer.close()
-base64.b64encode(buf.getvalue()).decode('ascii')
+out = pymupdf.open("pdf", buf.getvalue())
+try:
+    out.subset_fonts()
+except Exception:
+    pass
+data = out.tobytes(garbage=3, deflate=True)
+out.close()
+base64.b64encode(data).decode('ascii')
 `);
   for (const k of ['ph_html', 'ph_css', 'ph_paper', 'ph_margin']) py.globals.delete(k);
   const raw = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
