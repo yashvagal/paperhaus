@@ -192,7 +192,8 @@ Everything lives in `kit/kit.env`. Edit, commit, push, and Cloudflare rebuilds.
 | --- | --- |
 | `BRAND_NAME` | Name in the header, tab titles and footer |
 | `BRAND_LOGO` | Leave empty for the Paperhaus brand mark (`kit/brand/`), or point at your own SVG or PNG in the repo |
-| `SOURCE_URL` | Footer link to your public source code (AGPL requirement) |
+| `SOURCE_URL` | Your public source code, linked as "Source code" in the account menu (the AGPL asks for this offer) |
+| `FOOTER_TEXT` | Optional line at the bottom of every page. Empty by default |
 | `SITE_URL` | Your public Paperhaus website (the front page in `website/`). Adds **About Paperhaus** to the account menu. Leave empty for no link |
 | `OCR_LANGUAGES` | OCR languages served from your site, such as `eng,spa,hin`. Each adds a few MB |
 | `DISABLE_TOOLS` | Comma-separated tool IDs to hide. The ID is the page name in the URL, such as `bates-numbering` |

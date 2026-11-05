@@ -237,6 +237,13 @@
           '<i class="ph ph-info" aria-hidden="true"></i> About Paperhaus');
         menu.appendChild(about);
       }
+      // The source offer the AGPL asks for (Paperhaus is built on BentoPDF, AGPL-3.0).
+      var src = document.querySelector('meta[name="paperhaus-source"]');
+      var srcUrl = src && src.getAttribute('content');
+      if (srcUrl && /^https?:\/\//i.test(srcUrl)) {
+        menu.appendChild(el('a', { href: srcUrl, target: '_blank', rel: 'noopener', role: 'menuitem', class: 'ph-menu-item', title: 'Built on BentoPDF (AGPL-3.0)' },
+          '<i class="ph ph-code" aria-hidden="true"></i> Source code'));
+      }
       var out = el('a', { href: '/cdn-cgi/access/logout', role: 'menuitem', class: 'ph-menu-item' },
         '<i class="ph ph-sign-out" aria-hidden="true"></i> Sign out');
       out.addEventListener('click', function () {

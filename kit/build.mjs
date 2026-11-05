@@ -66,7 +66,7 @@ function loadKitEnv() {
   }
   if (!env.BRAND_NAME) fail('BRAND_NAME is empty in kit/kit.env');
   if (!env.SOURCE_URL || env.SOURCE_URL.includes('YOUR-GITHUB-USERNAME')) {
-    log('WARNING: SOURCE_URL in kit/kit.env is still the placeholder. Set it to your fork so the footer links to your source code.');
+    log('WARNING: SOURCE_URL in kit/kit.env is still the placeholder. Set it to your fork so the account menu links to your source code.');
   }
   env.OCR_LANGUAGES = (env.OCR_LANGUAGES || 'eng')
     .split(',').map((s) => s.trim()).filter(Boolean);
@@ -685,6 +685,8 @@ function addPinning(env) {
   const brand = escapeHtml(env.BRAND_NAME);
   // The public Paperhaus website, linked from the account menu. Only http(s) addresses.
   const siteUrl = /^https?:\/\/[^\s"<>]+$/i.test(env.SITE_URL || '') ? env.SITE_URL.replace(/\/+$/, '') : '';
+  // The fork's source code (AGPL offer), linked from the account menu.
+  const sourceUrl = /^https?:\/\/[^\s"<>]+$/i.test(env.SOURCE_URL || '') && !env.SOURCE_URL.includes('YOUR-GITHUB-USERNAME') ? env.SOURCE_URL : '';
   const tags =
     `<link rel="manifest" href="/site.webmanifest" crossorigin="use-credentials" ${PIN_MARK}>` +
     `<link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png" ${PIN_MARK}>` +
@@ -693,6 +695,7 @@ function addPinning(env) {
     `<meta name="apple-mobile-web-app-title" content="${brand}" ${PIN_MARK}>` +
     `<meta name="apple-mobile-web-app-status-bar-style" content="default" ${PIN_MARK}>` +
     (siteUrl ? `<meta name="paperhaus-site" content="${escapeHtml(siteUrl)}" ${PIN_MARK}>` : '') +
+    (sourceUrl ? `<meta name="paperhaus-source" content="${escapeHtml(sourceUrl)}" ${PIN_MARK}>` : '') +
     `<link rel="stylesheet" href="/kit-tools/pin/pin.css?v=${v}" ${PIN_MARK}>` +
     `<script src="/kit-tools/pin/pin.js?v=${v}" defer ${PIN_MARK}></script>`;
   // BentoPDF's own versions of these tags, and ours from an earlier run, are replaced.
@@ -835,9 +838,10 @@ const logoPublicPath = `images/brand-logo${extname(logoSrc)}`;
 const logoDest = join(ROOT, 'public', logoPublicPath);
 const logoExisted = existsSync(logoDest);
 
-const footer = env.SOURCE_URL
-  ? `Built on BentoPDF (AGPL-3.0). Source code: ${env.SOURCE_URL}`
-  : 'Built on BentoPDF (AGPL-3.0).';
+// The footer line is FOOTER_TEXT from kit.env, or nothing. (Left empty, BentoPDF would put
+// its own copyright line there, so a no-break space stands in.) The AGPL source offer
+// lives in the account menu instead: "Source code", linking to SOURCE_URL.
+const footer = (env.FOOTER_TEXT || '').trim() || '\u00a0';
 
 const buildEnv = {
   ...process.env,

@@ -190,7 +190,7 @@ async function preparePage(mode: 'text' | 'picture'): Promise<{ html: string; ti
       }
       // MuPDF reads PNG and JPEG; anything else (SVG, WebP, AVIF) is turned into a PNG here.
       const cur = img.getAttribute('src') || '';
-      if (mode === 'text' && cur.startsWith('data:') && !/^data:image\/(png|jpe?g)/i.test(cur)) {
+      if (mode === 'text' && cur.startsWith('data:')) {
         const png = await toPng(cur);
         if (png) img.setAttribute('src', png);
         else img.remove();
@@ -233,6 +233,10 @@ function readerView(doc: Document, title: string, base: string): void {
     .querySelectorAll('nav, footer, aside, form, button, input, select, textarea, svg, canvas, video, audio, [hidden], [aria-hidden="true"], [role="navigation"], [role="banner"], [role="contentinfo"], [style*="display:none"], [style*="display: none"]')
     .forEach((el) => el.remove());
   keep.querySelectorAll<HTMLElement>('[style]').forEach((el) => el.removeAttribute('style'));
+  keep.querySelectorAll<HTMLElement>('table, td, th, col, div').forEach((el) => {
+    el.removeAttribute('width');
+    el.removeAttribute('height');
+  });
   keep.querySelectorAll<HTMLElement>('[class]').forEach((el) => el.removeAttribute('class'));
   doc.body.textContent = '';
   const h = doc.createElement('h1');
@@ -245,19 +249,23 @@ function readerView(doc: Document, title: string, base: string): void {
   doc.body.append(...Array.from(keep.childNodes));
 }
 
+/** Any picture as a small JPEG on white (MuPDF reads JPEG fast; big pictures slow it right down). */
 function toPng(src: string): Promise<string | null> {
   return new Promise((resolve) => {
     const im = new Image();
     im.onload = () => {
-      const w = Math.min(im.naturalWidth || 300, 1600);
+      const w = Math.min(im.naturalWidth || 300, 1000);
       const h = Math.round(((im.naturalHeight || 150) * w) / (im.naturalWidth || 300));
       if (w < 2 || h < 2) return resolve(null);
       const c = document.createElement('canvas');
       c.width = w;
       c.height = h;
-      c.getContext('2d')!.drawImage(im, 0, 0, w, h);
+      const cx = c.getContext('2d')!;
+      cx.fillStyle = '#fff';
+      cx.fillRect(0, 0, w, h);
+      cx.drawImage(im, 0, 0, w, h);
       try {
-        resolve(c.toDataURL('image/png'));
+        resolve(c.toDataURL('image/jpeg', 0.85));
       } catch {
         resolve(null);
       }
@@ -294,15 +302,55 @@ async function asText(html: string): Promise<Uint8Array> {
   busy('Loading the layout engine...');
   const box = pageBox();
   const mupdf = (await loadPyMuPDF()) as unknown as {
-    htmlToPdf: (html: string, o: unknown) => Promise<Blob>;
+    getPyodide: () => Promise<{ globals: { set(k: string, v: unknown): void; delete(k: string): void }; runPython(code: string): string }>;
   };
   busy('Laying out the pages...');
   // MuPDF's paper names take "-l" for landscape.
   const css = `body{font-family:serif;font-size:11pt;line-height:1.45;color:#111} h1{font-size:20pt;margin:0 0 6pt} h2{font-size:15pt} h3{font-size:12.5pt}
-img{max-width:100%;height:auto} pre,code{font-family:monospace;font-size:9pt;white-space:pre-wrap} table{max-width:100%;border-collapse:collapse}
+img{max-width:100%;max-height:8in;height:auto} pre,code{font-family:monospace;font-size:9pt;white-space:pre-wrap} table{max-width:100%;border-collapse:collapse}
 td,th{border:0.5pt solid #999;padding:3pt} blockquote{margin-left:12pt;color:#444} a{color:#1a4fb5} .ph-src{font-size:8.5pt;color:#666;margin-bottom:12pt}`;
-  const blob = await mupdf.htmlToPdf(html, { pageSize: box.landscape ? `${box.size}-l` : box.size, margins: box.m, css });
-  return new Uint8Array(await blob.arrayBuffer());
+  // Our own layout loop rather than the engine's: it stops when nothing more fits on a
+  // fresh page (a picture or table bigger than the page would otherwise loop forever)
+  // and after 400 pages.
+  const py = await mupdf.getPyodide();
+  py.globals.set('ph_html', html);
+  py.globals.set('ph_css', css);
+  py.globals.set('ph_paper', box.landscape ? `${box.size}-l` : box.size);
+  py.globals.set('ph_margin', box.m);
+  await new Promise((r) => setTimeout(r, 30)); // let the busy message paint first
+  const b64 = py.runPython(`
+import io, base64, pymupdf
+mediabox = pymupdf.paper_rect(ph_paper)
+where = mediabox + (ph_margin, ph_margin, -ph_margin, -ph_margin)
+story = pymupdf.Story(html=ph_html, user_css=ph_css)
+buf = io.BytesIO()
+writer = pymupdf.DocumentWriter(buf)
+more = True
+pages = 0
+empty = 0
+while more and pages < 400 and empty < 3:
+    dev = writer.begin_page(mediabox)
+    more, filled = story.place(where)
+    story.draw(dev)
+    writer.end_page()
+    pages += 1
+    empty = empty + 1 if filled.is_empty else 0
+writer.close()
+base64.b64encode(buf.getvalue()).decode('ascii')
+`);
+  for (const k of ['ph_html', 'ph_css', 'ph_paper', 'ph_margin']) py.globals.delete(k);
+  const raw = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  // Drop blank pages a stuck layout may have left at the end, and make links clickable.
+  const doc = await PDFDocument.load(raw);
+  const pdfjsDoc = await openPdf(raw);
+  for (let i = pdfjsDoc.numPages; i > 1; i--) {
+    const pg = await pdfjsDoc.getPage(i);
+    const ops = await pg.getOperatorList();
+    if (ops.fnArray.length > 4) break;
+    doc.removePage(i - 1);
+  }
+  pdfjsDoc.destroy();
+  return await doc.save();
 }
 
 /** Find a row near `y` that is one plain color, so a page break doesn't cut a line of text. */
