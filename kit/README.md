@@ -10,7 +10,8 @@ What it does on every build:
 - Applies a Paperhaus design in the family of your other sites, with automatic light and dark mode (see "Designs" below).
 - Uses BentoPDF's clean "simple mode": only the tools, no marketing pages.
 - Adds Paperhaus's own **Scan** tool, a CamScanner-style scanner (see "Scan" below).
-- Adds **Request Signatures**: send a PDF to several people and get it back signed by all of them, with a signing certificate (see "Request Signatures" below).
+- Starts from the file: the home page takes a dropped file and suggests what to do with it, offers eight tasks, and keeps recent files on the device; every tool hands its result to the next one (see "Home and keep working" below).
+- Adds **Sign**, one tool for signing yourself, signing with others and sending to others. Every signed PDF gets a signing record, a chained audit trail, a certificate seal and an independent timestamp (see "Sign" below).
 - Adds **PDF to PowerPoint**, **HTML to PDF**, **Redact PDF**, **Summarize PDF** and **Translate PDF**, the tools iLovePDF has that BentoPDF lacks (see "More tools" below).
 - Lets you pin Paperhaus to your dock, taskbar or phone home screen straight from the browser (no app store), and shows who is signed in (see "Pin it and stay signed in" below).
 - Serves every engine from your own site instead of public CDNs. That covers PyMuPDF, Ghostscript, CoherentPDF, the Tesseract OCR engine with its language data and fonts, LibreOffice for Office files, and OpenCV for scanning. The site loads nothing from third parties.
@@ -123,31 +124,61 @@ The camera needs HTTPS, which Cloudflare Pages always provides. The security hea
 
 ---
 
-## Request Signatures
+## Home and keep working
 
-**Request Signatures** sits next to **Sign PDF**. You place fields for each signer, Paperhaus makes one private link per signer, and you email the links from your own email account. Signers need no account and no invite: whoever has a link can open it and sign.
+| Part | What it does |
+| --- | --- |
+| Drop zone | Drop or choose any file (or paste one, or paste a web page link). Paperhaus suggests what to do: for a PDF, Sign it, Get it signed by others, Fill in the form (only when it has form fields), Compress, Merge or reorder pages, Convert to Word, Redact, Add a password, Edit, Summarize. Office files, images and other formats get their "to PDF" tool. Several PDFs get Merge. |
+| Tasks | Eight tiles: Sign, Edit, Pages, Convert, Compress, Secure and redact, Scan, AI on this device. Edit, Convert, Secure and AI open as hubs: the full tool list filtered to that task (`/#edit`, `/#convert`, `/#secure`, `/#ai`). |
+| Recent and pinned | The last files you made, on this device only, with **Open** to keep working on them. Pinned tools are the tools you star in the list. |
+| Keep working | When any tool saves a file, a small panel offers the next steps (Compress, Add a password, Sign, Pages, Redact, Convert to Word). The next tool opens with the file already loaded. |
+| Phone | Under 640 px wide the home page gets a bottom bar: Home, Scan, Sign, Tools, Recent. |
+
+Recent files are kept in the browser's own storage (IndexedDB), up to 12 files or 200 MB, and never uploaded. **Clear recent files** in the account menu empties the list. The pieces: `kit/tools/pin/flow.js` (on every page) and `kit/tools/pin/home.js` (home only), with the home markup written by `kit/build.mjs`.
+
+**Pages** is BentoPDF's multi tool under a plainer name: merge, reorder, rotate, delete, extract and split in one view.
+
+---
+
+## Sign
+
+**Sign** takes Sign PDF's place in the tool list (its page is `request-signatures`). First choose who is signing:
+
+| Choice | What happens |
+| --- | --- |
+| Just me | Place your signature, press **Sign now**, sign, and download the sealed PDF. |
+| Me and others | You are signer 1, others follow in order. Press **Create links, then sign first**, sign from your link, and email the others theirs. |
+| Only others | Send it out and get it back signed. |
 
 | Step | What happens |
 | --- | --- |
-| 1. Document | Choose a PDF, up to 20 MB, and give it a title. |
-| 2. Signers | Up to 10, each with a name and email. **Add me** adds you (your Paperhaus sign-in email). **Sign in this order** makes each person wait for the one before. |
-| 3. Fields | Pick a signer, pick a field (Signature, Initials, Date signed, Full name, Text, Checkbox) and tap the page. Drag to move, pull the corner to resize, the x to remove. Every signer needs at least one Signature or Initials field. |
-| 4. Send | **Send from** is the email the invitations go out from, filled in with your sign-in email and remembered. Press **Create signing links**, then for each signer press **Gmail** or **Outlook** (a draft opens in that account, addressed and written, you press Send), **Email app**, or **Copy link**. Gmail opens the account that matches **Send from**, so a work address like `you@yourcompany.com` works when it is a Google Workspace account signed in to that browser. For Microsoft 365 addresses use **Outlook**. |
-| Signing | The signer opens the link, taps each highlighted field, adopts a signature (typed in one of three handwriting styles, or drawn with a finger, pen or mouse), agrees to sign electronically, and presses **Finish**. They can also **Decline**, with a reason. |
-| Tracking | **Sent for signature**, at the top of the page, lists your requests on that device with who has opened and signed. Send a reminder with the same buttons. **Cancel** deletes a request and stops its links. |
-| Finished copy | Once everyone signs, **Signed PDF** downloads the document with every field drawn in, plus a signing certificate page: the original's SHA-256 fingerprint, and each signer's email, view and signing times, IP address and device. **Send everyone the signed copy** emails a read-only download link to all signers. The last signer can download it straight away too. |
+| Document | Choose a PDF, up to 20 MB, and give it a title. |
+| Signers | Up to 10, each with a name, email and what their signature means (**Signs as**: Author, Approved, Reviewed, Agreed, Witness, Received). You default to Author, others to Approved. **Sign in this order** makes each person wait for the one before. |
+| Fields | Pick a signer, pick a field (Signature, Initials, Date signed, Full name, Text, Checkbox) and tap the page. Drag to move, pull the corner to resize, the x to remove. Every signer needs at least one Signature or Initials field. |
+| Send | **Send from** is the email the invitations go out from, filled in with your sign-in email and remembered. For each signer press **Gmail** or **Outlook** (a draft opens in that account, you press Send), **Email app**, or **Copy link**. |
+| Signing | The signer opens the link, fills each highlighted field, sees what their signature means, agrees to sign electronically and presses **Finish**. They can also **Decline**, with a reason. Signers have 14 days. |
+| Tracking | **Sent for signature** lists your requests on that device with who has opened and signed. **Signing record** opens the record at any time. |
+| Finished copy | When the last person signs, their browser builds the signed PDF, adds the signing record and audit trail pages, and seals it. Everyone downloads that same sealed copy. **Send everyone the signed copy** emails a read-only download link to all signers. |
+
+Added automatically, with nothing for you or your signers to do:
+
+- **Signing record page**: document, envelope ID, sender, original SHA-256, how long it is kept, and for each signer their email, what their signature means, view and signing times, IP address, device and the consent they agreed to.
+- **Audit trail**: created, opened, signed, declined, completed and sealed, with time, person, device, location and IP. Each entry holds the SHA-256 of the one before it, so an entry cannot be changed or removed unnoticed. It is printed in the PDF, shown in **Signing record** with a chain check, and exports as CSV.
+- **Seal**: an invisible certificate signature over the whole finished PDF (ECDSA P-256, Paperhaus's own certificate). PDF readers show it as intact and unchanged; any later change shows as a broken seal. The key is made on the server on first use, kept in KV under `k:seal`, and never leaves it. Only a hash of the PDF is sent to be sealed.
+- **Timestamp**: the seal is timestamped by an independent RFC 3161 time server (DigiCert, then Sectigo, then SSL.com). Set `TSA_URLS` (comma separated) as a Pages variable to use others.
+- **Fingerprint**: the sealed copy's SHA-256 is recorded. **Check a copy of this PDF** in the signing record tells you whether any file is the signed original, byte for byte.
+- **Retention**: **Keep signed records for** 14 days, 1 year (default) or 7 years, set once on the Sign page. Cloudflare deletes the request and its record after that, or right away on **Delete**.
 
 How it keeps documents private:
 
-- The PDF and everything about the request (names, emails, fields, signatures) are encrypted in your browser with AES-256-GCM before upload. The key is only in the signing links, after the `#`, which browsers never send to a server. Paperhaus's server stores encrypted bytes it cannot read.
+- The PDF and everything about the request (names, emails, fields, signatures, the sealed copy) are encrypted in your browser with AES-256-GCM before upload. The key is only in the signing links, after the `#`, which browsers never send to a server. Paperhaus's server stores encrypted bytes it cannot read. The audit trail numbers signers instead of naming them; names come from the encrypted request when it is shown.
 - Each signer has their own link, and the server keeps only a hash of each link's token. A signer's link can only sign as that signer.
-- Everything is stored in Cloudflare KV and deleted automatically 14 days after sending, or right away on **Cancel**. Download the signed copy before then.
 - Paperhaus sends no email itself. Invitations come from your own account, so they reach inboxes and replies come back to you.
-- Your list of sent requests, and their keys, stay in that browser on that device. To track a request from another device, open the same page there after sending from it, or keep the signed copy.
+- Your list of sent requests, and their keys, stay in that browser on that device.
 
 Setup (once, free): in Cloudflare create a KV namespace and bind it to the Pages project as `ESIGN`, and let signers past the Paperhaus sign-in for the signing page only. Step 3b of `DEPLOY.md` has the clicks. Until the binding exists, **Create signing links** says e-sign is not set up yet.
 
-The pieces: `kit/tools/esign/` (the two pages and their code) and `functions/api/esign/` (the small storage API, a Cloudflare Pages Function). The build adds `_routes.json` so only `/api/*` runs as a Function; the free plan allows 100,000 Function requests a day.
+The pieces: `kit/tools/esign/` (the two pages and their code), `functions/api/esign/` (the storage API) and `functions/_shared/seal.js` (the seal and timestamp), all Cloudflare Pages Functions. The build adds `_routes.json` so only `/api/*` runs as a Function; the free plan allows 100,000 Function requests a day. `kit/POLICIES.md` has the matching security and records policies.
 
 ---
 
@@ -295,7 +326,7 @@ BentoPDF's own build regenerates a few tracked files (blog pages, a partial, a h
 - **Scan edge detection:** works best with a page on a darker or contrasting surface. On a white desk, or with a dark band at the page edge, drag the corners into place.
 - **Summarize and Translate PDF:** they need desktop Chrome's built-in AI. Translated "same layout" pages are pictures, so their text can't be selected; use **Translated text** to get it as text.
 - **HTML to PDF:** no JavaScript runs, so app-like pages may be blank. Pages behind a login can't be fetched. Links in Selectable text PDFs are not clickable yet.
-- **Request Signatures:** these are electronic signatures with an audit certificate, like typical e-sign services, not certificate-based digital signatures. For a certificate signature on top, run the finished PDF through Digital Signature. Requests last 14 days.
+- **Sign:** signatures are electronic signatures with a signing record and audit trail, sealed with Paperhaus's own certificate and an independent timestamp. PDF readers show the seal as intact, with the certificate marked as not from a public authority. For a signature with your own certificate, use Digital Signature. Signers have 14 days; records are kept 14 days, 1 year or 7 years.
 - **App icons:** the home screen and dock icons come from `kit/brand/icons/`. A custom `BRAND_LOGO` changes the logo in the header and browser tab, not those icons.
 - **Search engines:** the site sends `noindex` and its `robots.txt` blocks crawlers, so it stays unlisted.
 

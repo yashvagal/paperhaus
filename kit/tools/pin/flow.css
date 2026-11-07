@@ -1,0 +1,115 @@
+/* Paperhaus "keep working" panel: shown when a tool saves a file. Design tokens, with
+   fallbacks for THEME=none. */
+.ph-done {
+  position: fixed;
+  z-index: 70;
+  right: max(1rem, env(safe-area-inset-right, 0px));
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  width: min(26rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 6rem);
+  overflow: auto;
+  padding: 1rem;
+  border-radius: calc(var(--r-card, 16px) + 6px);
+  background: var(--surface, #1f2937);
+  color: var(--text, #f3f4f6);
+  border: 1px solid var(--line, #374151);
+  box-shadow: var(--shadow-lift, 0 24px 48px -20px rgba(0, 0, 0, 0.6));
+  animation: ph-done-in 0.25s ease-out;
+}
+@keyframes ph-done-in {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ph-done {
+    animation: none;
+  }
+}
+@media (max-width: 560px) {
+  .ph-done {
+    left: max(0.75rem, env(safe-area-inset-left, 0px));
+    right: max(0.75rem, env(safe-area-inset-right, 0px));
+    width: auto;
+  }
+}
+.ph-done-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+.ph-done-ok {
+  flex: none;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--good-soft, rgba(52, 211, 153, 0.15));
+  color: var(--good, #34d399);
+  font-size: 1.1rem;
+}
+.ph-done-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ph-done-title strong {
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ph-done-title span {
+  font-size: 0.78rem;
+  color: var(--muted, #9ca3af);
+}
+.ph-done-x {
+  flex: none;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--muted, #9ca3af);
+}
+.ph-done-x:hover {
+  background: var(--accent-soft, rgba(99, 102, 241, 0.16));
+  color: var(--text, #f3f4f6);
+}
+.ph-done-label {
+  margin: 0.9rem 0 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-2, #d1d5db);
+}
+.ph-done-steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.ph-done-step {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--r-card, 14px);
+  border: 1px solid var(--line, #374151);
+  background: var(--surface-2, #111827);
+  color: var(--text, #f3f4f6);
+  text-decoration: none;
+  min-width: 0;
+}
+.ph-done-step:hover {
+  border-color: var(--accent, #818cf8);
+}
+.ph-done-step strong {
+  font-size: 0.86rem;
+}
+.ph-done-step span {
+  font-size: 0.74rem;
+  color: var(--muted, #9ca3af);
+  line-height: 1.35;
+}

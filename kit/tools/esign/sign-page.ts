@@ -18,13 +18,14 @@ import {
   SCRIPT_FONTS,
   SIGNER_COLORS,
   api,
-  buildSignedPdf,
   checkPng,
   decrypt,
   decryptJson,
   downloadBytes,
   encrypt,
+  finalCopy,
   formatDate,
+  openRecord,
   fromB64,
   openPdf,
   parseLink,
@@ -49,6 +50,7 @@ let me = -1; // my signer index, or -1 for the read-only link
 let canSign = false;
 const values: Record<string, Value> = {};
 const adopted: { signature: string; initials: string } = { signature: '', initials: '' };
+let finishing: Promise<{ pdf: Uint8Array; sealed: boolean }> | null = null;
 
 // ------------------------------------------------------------------ small helpers
 
@@ -103,7 +105,7 @@ async function start(): Promise<void> {
     state = await api.state(link.id, link.token);
   } catch (err) {
     const e = err as ApiError;
-    if (e.status === 404) fail('This request has ended', 'The sender cancelled it, or it is more than 14 days old. Ask them to send it again.');
+    if (e.status === 404) fail('This request has ended', 'The sender cancelled or deleted it, or the time it was kept for has passed. Ask them to send it again.');
     else if (e.status === 403) fail('This link does not work', 'Open the signing link from your email again, all of it.');
     else fail('Paperhaus could not be reached', 'Check your connection and reload the page.');
     return;
@@ -202,7 +204,11 @@ function decide(): void {
     return;
   }
   if (state.status === 'complete') {
-    note('good', `Everyone has signed. Download the signed PDF, with its signing certificate on the last page.`);
+    note('good', `Everyone has signed. The signed PDF is sealed and timestamped, with its signing record at the end.`);
+    return;
+  }
+  if (state.status === 'expired') {
+    note('bad', `The time to sign ran out on ${formatDate(state.expires)}. Ask ${env.sender.name} to send it again.`);
     return;
   }
   if (me < 0) {
@@ -211,7 +217,13 @@ function decide(): void {
     return;
   }
   if (state.signers[me].signed) {
-    note('good', `You signed on ${formatDate(state.signers[me].signed!.at, true)}. ${firstName(env.sender.name)} will send everyone the signed copy once the others have signed.`);
+    const isSender = env.signers[me].email.toLowerCase() === env.sender.email.toLowerCase();
+    note(
+      'good',
+      isSender
+        ? `You signed on ${formatDate(state.signers[me].signed!.at, true)}. The others can sign now from their links. The signed copy will be under Sent for signature on the Sign page.`
+        : `You signed on ${formatDate(state.signers[me].signed!.at, true)}. ${firstName(env.sender.name)} will send everyone the signed copy once the others have signed.`
+    );
     return;
   }
   if (env.ordered) {
@@ -524,6 +536,7 @@ function confirmFinish(): Promise<boolean> {
     wrap.innerHTML = `
       <div class="es-modal" role="dialog" aria-modal="true">
         <h3 class="es-h2" data-title></h3>
+        <p class="es-sub" data-reason style="margin:0"></p>
         <label class="es-check-row" style="margin:0.6rem 0 1rem"><input type="checkbox" /> <span data-consent></span></label>
         <div class="es-row" style="justify-content:flex-end">
           <button type="button" class="es-btn" data-v="0">Back</button>
@@ -532,6 +545,7 @@ function confirmFinish(): Promise<boolean> {
       </div>`;
     wrap.querySelector('[data-title]')!.textContent = `Sign “${env.title}”`;
     wrap.querySelector('[data-consent]')!.textContent = CONSENT;
+    wrap.querySelector('[data-reason]')!.textContent = `You are signing as: ${env.signers[me]?.reason || 'Signer'}. This is recorded with your signature.`;
     const box = wrap.querySelector<HTMLInputElement>('input')!;
     const ok = wrap.querySelector<HTMLButtonElement>('[data-v="1"]')!;
     box.onchange = () => (ok.disabled = !box.checked);
@@ -576,6 +590,8 @@ async function finish(): Promise<void> {
     updateBar();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     toast(state.status === 'complete' ? 'Signed. Everyone is done.' : 'Signed. Thank you.');
+    // The last signature: seal the finished copy now, so its fingerprint is on record.
+    if (state.status === 'complete') void finished().catch((): undefined => undefined);
   } catch (err) {
     const e = err as ApiError;
     if (e.code === 'already_signed') {
@@ -646,11 +662,31 @@ async function reload(): Promise<void> {
   updateBar();
 }
 
+/** The sealed copy, built and sealed once (by whoever gets here first) and stored. */
+function finished(): Promise<{ pdf: Uint8Array; sealed: boolean }> {
+  if (!finishing) {
+    finishing = (async () => {
+      await loadSubs();
+      const out = await finalCopy(link, env, state, doc, subs);
+      state = out.state;
+      return out;
+    })();
+    finishing.catch((): void => {
+      finishing = null;
+    });
+  }
+  return finishing;
+}
+
 async function download(): Promise<void> {
-  busy('Building the signed PDF...');
+  busy(state.sealed ? 'Opening the signed PDF...' : 'Sealing the signed PDF...');
   try {
-    await loadSubs();
-    downloadBytes(await buildSignedPdf(doc, env, state, subs), signedName(env));
+    const out = await finished();
+    downloadBytes(out.pdf, signedName(env));
+    if (!out.sealed) {
+      finishing = null;
+      toast('Downloaded without the seal. Try again later for the sealed copy.');
+    }
   } catch (err) {
     console.error(err);
     toast('Could not build the PDF. Reload and try again.');
@@ -675,6 +711,14 @@ function init(): void {
   $('es-finish').addEventListener('click', () => void finish());
   $('es-decline').addEventListener('click', () => void decline());
   $('es-download').addEventListener('click', () => void download());
+  $('es-record').addEventListener('click', async () => {
+    try {
+      state = await api.state(link.id, link.token);
+    } catch {
+      /* show what we have */
+    }
+    void openRecord(env, state, state.status === 'complete' ? () => void download() : null);
+  });
   let t = 0;
   let lastW = window.innerWidth;
   window.addEventListener('resize', () => {

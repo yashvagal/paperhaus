@@ -10,6 +10,9 @@ import '../../utils/map-upsert-polyfill.js';
 import * as pdfjsLib from 'pdfjs-dist';
 import '../../utils/setup-pdf-worker.js';
 import { PDFDocument, degrees } from 'pdf-lib';
+import { type SealResult, sealPdf } from './esign-seal.js';
+
+export { type SealResult, sealPdf };
 
 export type FieldType = 'signature' | 'initials' | 'date' | 'name' | 'text' | 'checkbox';
 
@@ -30,7 +33,11 @@ export interface Field {
 export interface Signer {
   name: string;
   email: string;
+  /** What this signature means (21 CFR 11.50): Author, Approved, Reviewed... */
+  reason?: string;
 }
+
+export const REASONS = ['Author', 'Approved', 'Reviewed', 'Agreed', 'Witness', 'Received'];
 
 export interface Envelope {
   v: 1;
@@ -60,6 +67,30 @@ export interface Stamp {
   ua: string;
 }
 
+/** One audit trail entry, chained to the one before it by its hash. */
+export interface AuditEvent {
+  n: number;
+  t: number;
+  ev: 'created' | 'viewed' | 'signed' | 'declined' | 'completed' | 'sealed' | string;
+  by: number | 'sender' | 'reader' | 'paperhaus';
+  ip: string;
+  ua: string;
+  geo: string;
+  prev: string;
+  h: string;
+  fingerprint?: string;
+  timestamp?: string;
+  docSha256?: string;
+  consent?: boolean;
+}
+
+export interface Sealed {
+  fingerprint: string;
+  at: number;
+  timestamp: { by: string; at: number | null } | null;
+  cert: string | null;
+}
+
 export interface State {
   id: string;
   role: 'signer' | 'sender' | 'reader';
@@ -69,11 +100,17 @@ export interface State {
   sender: string;
   created: number;
   expires: number;
-  status: 'out' | 'complete' | 'declined' | 'cancelled';
+  status: 'out' | 'complete' | 'declined' | 'cancelled' | 'expired';
   declined: (Stamp & { index: number; reason: string | null }) | null;
   signers: { viewed: Stamp | null; signed: Stamp | null }[];
   envelope?: string;
+  keep?: number;
+  retainUntil?: number;
+  sealed?: Sealed | null;
+  events?: AuditEvent[];
 }
+
+
 
 export const CONSENT =
   'I agree to sign this document electronically and that my electronic signature counts as my handwritten signature.';
@@ -199,6 +236,27 @@ export const api = {
   },
   async cancel(id: string, t: string): Promise<void> {
     await call(`/api/esign/p/${id}/cancel?t=${encodeURIComponent(t)}`, { method: 'POST' });
+  },
+  async seal(id: string, t: string, digest: string): Promise<SealResult> {
+    return (
+      await call(`/api/esign/p/${id}/seal?t=${encodeURIComponent(t)}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ digest }),
+      })
+    ).json();
+  },
+  async putFinal(id: string, t: string, body: Uint8Array, fingerprint: string, info: Pick<SealResult, 'cert' | 'timestamp'>): Promise<State> {
+    return (
+      await call(`/api/esign/p/${id}/final?t=${encodeURIComponent(t)}`, {
+        method: 'POST',
+        headers: { 'x-fingerprint': fingerprint, 'x-seal': JSON.stringify(info) },
+        body: body as BodyInit,
+      })
+    ).json();
+  },
+  async getFinal(id: string, t: string): Promise<Uint8Array> {
+    return new Uint8Array(await (await call(`/api/esign/p/${id}/final?t=${encodeURIComponent(t)}`)).arrayBuffer());
   },
 };
 
@@ -377,6 +435,7 @@ export async function buildSignedPdf(
   }
 
   await addCertificate(pdf, env, state, subs, original);
+  if (state.events?.length) await addAuditPage(pdf, env, state);
   pdf.setTitle(env.title);
   pdf.setSubject(`Signed with Paperhaus. Envelope ${state.id}.`);
   pdf.setProducer('Paperhaus');
@@ -385,13 +444,8 @@ export async function buildSignedPdf(
   return pdf.save();
 }
 
-async function addCertificate(
-  pdf: PDFDocument,
-  env: Envelope,
-  state: State,
-  subs: (Submission | null)[],
-  original: Uint8Array
-): Promise<void> {
+/** A letter-size page drawn on a canvas (any script prints right), added as a picture. */
+async function canvasPage(pdf: PDFDocument, draw: (ctx: CanvasRenderingContext2D, W: number, H: number) => Promise<void> | void): Promise<void> {
   const W = 612;
   const H = 792;
   const scale = 2.5;
@@ -402,80 +456,251 @@ async function addCertificate(
   ctx.scale(scale, scale);
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, W, H);
-  const font = (size: number, weight = 400) => `${weight} ${size}px "Poppins", "Noto Sans", system-ui, sans-serif`;
-  let y = 56;
-  const left = 48;
-  const line = (text: string, size = 9, weight = 400, color = '#333333', x = left) => {
-    ctx.font = font(size, weight);
-    ctx.fillStyle = color;
-    ctx.fillText(text, x, y);
-  };
   ctx.textBaseline = 'alphabetic';
-  line('Signing certificate', 20, 600, '#3a2a1f');
-  y += 18;
-  line('Paperhaus electronic signatures', 9, 400, '#8f7965');
-  y += 26;
-  const hash = await sha256hex(original);
-  const rows: [string, string][] = [
-    ['Document', env.title || env.docName],
-    ['Envelope ID', state.id],
-    ['Sent by', `${env.sender.name} <${env.sender.email}>`],
-    ['Sent on', formatDate(env.createdAt, true)],
-    ['Signing order', env.ordered ? 'In order' : 'Any order'],
-    ['Original SHA-256', hash],
-  ];
-  for (const [k, v] of rows) {
-    line(k, 8.5, 600, '#6b5646');
-    line(v, 8.5, 400, '#222222', 150);
-    y += 15;
-  }
-  y += 12;
-  ctx.fillStyle = '#e6d1b6';
-  ctx.fillRect(left, y, W - left * 2, 1);
-  y += 22;
-  for (let i = 0; i < env.signers.length; i++) {
-    const s = env.signers[i];
-    const st = state.signers[i];
-    const sub = subs[i];
-    if (y > H - 130) break;
-    line(`${i + 1}. ${s.name}`, 11, 600, '#3a2a1f');
-    y += 15;
-    line(s.email, 8.5, 400, '#6b5646');
-    y += 15;
-    const sigField = env.fields.find((f) => f.signer === i && f.type === 'signature' && sub?.values[f.id]?.png);
-    if (sigField && sub) {
-      const img = new Image();
-      img.src = sub.values[sigField.id].png;
-      await img.decode().catch((): undefined => undefined);
-      const h = 30;
-      const w = Math.min(160, (img.width / Math.max(1, img.height)) * h);
-      ctx.drawImage(img, W - left - w, y - 44, w, h);
-    }
-    const facts: [string, string][] = [
-      ['Viewed', st?.viewed ? formatDate(st.viewed.at, true) : 'Not recorded'],
-      ['Signed', st?.signed ? formatDate(st.signed.at, true) : 'Not signed'],
-      ['IP address', st?.signed?.ip || st?.viewed?.ip || ''],
-      ['Device', shortUa(st?.signed?.ua || st?.viewed?.ua || '')],
-    ];
-    for (const [k, v] of facts) {
-      line(k, 8, 600, '#8f7965', left + 12);
-      line(v, 8, 400, '#333333', left + 90);
-      y += 13;
-    }
-    if (sub) {
-      ctx.font = font(7.5);
-      ctx.fillStyle = '#6b5646';
-      ctx.fillText(`Agreed: "${sub.consent}"`, left + 12, y);
-      y += 13;
-    }
-    y += 12;
-  }
-  y = H - 40;
-  line('Every signer opened their own private link and agreed to sign electronically. Times are as recorded by Paperhaus.', 7, 400, '#8f7965');
-  const png = c.toDataURL('image/png');
-  const img = await pdf.embedPng(dataUrlBytes(png));
+  await draw(ctx, W, H);
+  const img = await pdf.embedPng(dataUrlBytes(c.toDataURL('image/png')));
   const page = pdf.addPage([W, H]);
   page.drawImage(img, { x: 0, y: 0, width: W, height: H });
+}
+
+const font = (size: number, weight = 400) => `${weight} ${size}px "Poppins", "Noto Sans", system-ui, sans-serif`;
+
+function fit(ctx: CanvasRenderingContext2D, text: string, max: number): string {
+  if (ctx.measureText(text).width <= max) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(`${t}…`).width > max) t = t.slice(0, -1);
+  return `${t}…`;
+}
+
+async function addCertificate(
+  pdf: PDFDocument,
+  env: Envelope,
+  state: State,
+  subs: (Submission | null)[],
+  original: Uint8Array
+): Promise<void> {
+  const hash = await sha256hex(original);
+  await canvasPage(pdf, async (ctx, W, H) => {
+    let y = 56;
+    const left = 48;
+    const line = (text: string, size = 9, weight = 400, color = '#333333', x = left, max = W - x - left) => {
+      ctx.font = font(size, weight);
+      ctx.fillStyle = color;
+      ctx.fillText(fit(ctx, text, max), x, y);
+    };
+    line('Signing record', 20, 600, '#3a2a1f');
+    y += 18;
+    line('Paperhaus electronic signatures', 9, 400, '#8f7965');
+    y += 26;
+    const rows: [string, string][] = [
+      ['Document', env.title || env.docName],
+      ['Envelope ID', state.id],
+      ['Sent by', `${env.sender.name} <${env.sender.email}>`],
+      ['Sent on', formatDate(env.createdAt, true)],
+      ['Signing order', env.ordered ? 'In order' : 'Any order'],
+      ['Original SHA-256', hash],
+    ];
+    if (state.retainUntil) rows.push(['Record kept until', formatDate(state.retainUntil)]);
+    for (const [k, v] of rows) {
+      line(k, 8.5, 600, '#6b5646');
+      line(v, 8.5, 400, '#222222', 150);
+      y += 15;
+    }
+    y += 12;
+    ctx.fillStyle = '#e6d1b6';
+    ctx.fillRect(left, y, W - left * 2, 1);
+    y += 22;
+    for (let i = 0; i < env.signers.length; i++) {
+      const s = env.signers[i];
+      const st = state.signers[i];
+      const sub = subs[i];
+      if (y > H - 130) break;
+      line(`${i + 1}. ${s.name}`, 11, 600, '#3a2a1f', left, 300);
+      y += 15;
+      line(`${s.email} · Signed as: ${s.reason || 'Signer'}`, 8.5, 400, '#6b5646', left, 330);
+      y += 15;
+      const sigField = env.fields.find((f) => f.signer === i && f.type === 'signature' && sub?.values[f.id]?.png);
+      if (sigField && sub) {
+        const img = new Image();
+        img.src = sub.values[sigField.id].png;
+        await img.decode().catch((): undefined => undefined);
+        const h = 30;
+        const w = Math.min(160, (img.width / Math.max(1, img.height)) * h);
+        ctx.drawImage(img, W - left - w, y - 44, w, h);
+      }
+      const facts: [string, string][] = [
+        ['Viewed', st?.viewed ? formatDate(st.viewed.at, true) : 'Not recorded'],
+        ['Signed', st?.signed ? formatDate(st.signed.at, true) : 'Not signed'],
+        ['IP address', st?.signed?.ip || st?.viewed?.ip || ''],
+        ['Device', shortUa(st?.signed?.ua || st?.viewed?.ua || '')],
+      ];
+      for (const [k, v] of facts) {
+        line(k, 8, 600, '#8f7965', left + 12);
+        line(v, 8, 400, '#333333', left + 90);
+        y += 13;
+      }
+      if (sub) {
+        line(`Agreed: "${sub.consent}"`, 7.5, 400, '#6b5646', left + 12);
+        y += 13;
+      }
+      y += 12;
+    }
+    y = H - 52;
+    line('Every signer opened their own private link and agreed to sign electronically. Times are as recorded by Paperhaus.', 7, 400, '#8f7965');
+    y += 11;
+    line('This PDF is sealed with the Paperhaus certificate and an independent timestamp. Any change after sealing breaks the seal.', 7, 400, '#8f7965');
+  });
+}
+
+/** Who did something in the audit trail, by name where the envelope has it. */
+export function whoName(e: AuditEvent, env: Envelope): string {
+  if (e.by === 'sender') return env.sender.name || env.sender.email;
+  if (e.by === 'paperhaus') return 'Paperhaus';
+  if (e.by === 'reader') return 'Read-only link';
+  return env.signers[e.by as number]?.name || `Signer ${Number(e.by) + 1}`;
+}
+
+export function whoEmail(e: AuditEvent, env: Envelope): string {
+  if (e.by === 'sender') return env.sender.email;
+  if (typeof e.by === 'number') return env.signers[e.by]?.email || '';
+  return '';
+}
+
+export function eventText(e: AuditEvent, env: Envelope): string {
+  switch (e.ev) {
+    case 'created':
+      return 'Request created, document encrypted';
+    case 'viewed':
+      return 'Opened the signing link';
+    case 'signed': {
+      const r = typeof e.by === 'number' ? env.signers[e.by]?.reason : '';
+      return `Agreed to e-sign and signed${r ? ` as ${r}` : ''}`;
+    }
+    case 'declined':
+      return 'Declined to sign';
+    case 'completed':
+      return 'Everyone has signed';
+    case 'sealed':
+      return e.timestamp && e.timestamp !== 'none' ? `Sealed and timestamped (${e.timestamp})` : 'Sealed (no timestamp server answered)';
+    default:
+      return e.ev;
+  }
+}
+
+export function eventFrom(e: AuditEvent): string {
+  return [shortUa(e.ua), e.geo, e.ip].filter(Boolean).join(' · ');
+}
+
+/** Recompute every entry's hash and link. Returns how many check out, and the first bad one. */
+export async function verifyChain(events: AuditEvent[]): Promise<{ ok: boolean; good: number; bad: number | null }> {
+  let prev = '0'.repeat(64);
+  for (let i = 0; i < events.length; i++) {
+    const { h, ...rest } = events[i];
+    if (rest.prev !== prev || (await sha256hex(JSON.stringify(rest))) !== h) return { ok: false, good: i, bad: i };
+    prev = h;
+  }
+  return { ok: true, good: events.length, bad: null };
+}
+
+export function auditCsv(events: AuditEvent[], env: Envelope, state: State): string {
+  const q = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const head = ['#', 'Time (UTC)', 'Local time', 'Event', 'Who', 'Email', 'IP address', 'Location', 'Device', 'Previous entry hash', 'Entry hash'];
+  const rows = events.map((e) => [e.n, new Date(e.t).toISOString(), formatDate(e.t, true), eventText(e, env), whoName(e, env), whoEmail(e, env), e.ip, e.geo, shortUa(e.ua), e.prev, e.h]);
+  const meta = [
+    ['Document', env.title || env.docName],
+    ['Envelope ID', state.id],
+    ['Signed PDF SHA-256', state.sealed?.fingerprint || ''],
+  ];
+  return [...meta.map((r) => r.map(q).join(',')), '', head.map(q).join(','), ...rows.map((r) => r.map(q).join(','))].join('\r\n') + '\r\n';
+}
+
+async function addAuditPage(pdf: PDFDocument, env: Envelope, state: State): Promise<void> {
+  const events = state.events || [];
+  const chain = await verifyChain(events);
+  const perPage = 26;
+  for (let start = 0; start < events.length; start += perPage) {
+    const chunk = events.slice(start, start + perPage);
+    await canvasPage(pdf, (ctx, W, H) => {
+      const left = 48;
+      let y = 56;
+      const text = (t: string, x: number, max: number, size = 8, weight = 400, color = '#333333') => {
+        ctx.font = font(size, weight);
+        ctx.fillStyle = color;
+        ctx.fillText(fit(ctx, t, max), x, y);
+      };
+      text(start ? 'Audit trail (continued)' : 'Audit trail', left, 400, 20, 600, '#3a2a1f');
+      y += 18;
+      text(`${env.title || env.docName} · Envelope ${state.id}`, left, W - 2 * left, 9, 400, '#8f7965');
+      y += 26;
+      const cols = [left, left + 104, left + 304, left + 388];
+      ['Time', 'What happened', 'Who', 'From'].forEach((h, i) => text(h, cols[i], (cols[i + 1] || W - left) - cols[i] - 8, 8, 600, '#6b5646'));
+      y += 8;
+      ctx.fillStyle = '#e6d1b6';
+      ctx.fillRect(left, y, W - 2 * left, 1);
+      y += 14;
+      for (const e of chunk) {
+        text(formatDate(e.t, true), cols[0], 108, 7.5);
+        text(eventText(e, env), cols[1], 194, 7.5);
+        text(whoName(e, env), cols[2], 78, 7.5);
+        text(eventFrom(e), cols[3], W - left - cols[3], 7.5, 400, '#6b5646');
+        y += 11;
+        text(`#${e.n}  ${e.h.slice(0, 32)}…`, cols[1], 260, 6, 400, '#a8917c');
+        y += 12;
+      }
+      if (start + perPage >= events.length) {
+        y = H - 64;
+        const last = events[events.length - 1];
+        text(
+          chain.ok
+            ? `Chain intact: ${chain.good} of ${events.length} entries check out. Each entry holds the SHA-256 of the one before it.`
+            : `Chain check failed at entry ${(chain.bad ?? 0) + 1}.`,
+          left, W - 2 * left, 7.5, 600, chain.ok ? '#2f7a52' : '#b0392b'
+        );
+        y += 12;
+        text(`Last entry hash: ${last.h}`, left, W - 2 * left, 7, 400, '#8f7965');
+        y += 12;
+        text('The seal, its timestamp and the signed PDF fingerprint are recorded in the trail once sealing is done.', left, W - 2 * left, 7, 400, '#8f7965');
+      }
+    });
+  }
+}
+
+/**
+ * The finished copy everyone gets: the sealed PDF stored once, when signing completed.
+ * If nobody has sealed it yet, this browser builds it, seals it and stores it (encrypted).
+ */
+export async function finalCopy(
+  link: { id: string; key: Uint8Array; token: string },
+  env: Envelope,
+  state: State,
+  doc: Uint8Array,
+  subs: (Submission | null)[]
+): Promise<{ pdf: Uint8Array; state: State; sealed: boolean }> {
+  const stored = async (st: State) => {
+    const pdf = await decrypt(link.key, await api.getFinal(link.id, link.token));
+    if (st.sealed && (await sha256hex(pdf)) !== st.sealed.fingerprint) throw new Error('The stored signed copy does not match its fingerprint.');
+    return { pdf, state: st, sealed: true };
+  };
+  if (state.sealed) return stored(state);
+  const built = await buildSignedPdf(doc, env, state, subs);
+  let result: { pdf: Uint8Array; seal: SealResult };
+  try {
+    result = await sealPdf(built, (digest) => api.seal(link.id, link.token, digest));
+  } catch (err) {
+    const e = err as ApiError;
+    if (e.code === 'sealed') return stored(await api.state(link.id, link.token));
+    console.warn('Paperhaus seal unavailable', err);
+    return { pdf: built, state, sealed: false };
+  }
+  const fp = await sha256hex(result.pdf);
+  try {
+    const st = await api.putFinal(link.id, link.token, await encrypt(link.key, result.pdf), fp, { cert: result.seal.cert, timestamp: result.seal.timestamp });
+    return { pdf: result.pdf, state: st, sealed: true };
+  } catch (err) {
+    if ((err as ApiError).code === 'sealed') return stored(await api.state(link.id, link.token));
+    console.warn('Could not store the sealed copy', err);
+    return { pdf: result.pdf, state, sealed: true };
+  }
 }
 
 function shortUa(ua: string): string {
@@ -503,4 +728,144 @@ export function signedName(env: Envelope): string {
 
 export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+}
+
+// ---------------------------------------------------------------- the signing record (on screen)
+
+export function saveBlob(blob: Blob, name: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+/**
+ * The signing record as a sheet over the page: fingerprint, seal, timestamp, the chained
+ * audit trail, and a check for any copy of the signed PDF.
+ */
+export async function openRecord(env: Envelope, state: State, onDownload: (() => void) | null): Promise<void> {
+  const events = state.events || [];
+  const chain = await verifyChain(events);
+  const signed = state.signers.filter((s) => s.signed).length;
+  const wrap = document.createElement('div');
+  wrap.className = 'es-modal-wrap es-record-wrap';
+  wrap.innerHTML = `
+    <div class="es-modal es-record" role="dialog" aria-modal="true" aria-label="Signing record">
+      <div class="es-record-head">
+        <div style="min-width:0;flex:1 1 16rem">
+          <div class="es-sub">Signing record</div>
+          <h3 class="es-h1 es-record-title" data-title></h3>
+        </div>
+        <div class="es-row" data-chips></div>
+        <button type="button" class="es-btn es-small" data-close aria-label="Close"><i class="ph ph-x"></i></button>
+      </div>
+      <div class="es-record-facts" data-facts></div>
+      <div class="es-record-trail">
+        <div class="es-env-head">
+          <h4 class="es-h2" style="margin:0">Audit trail</h4>
+          <span class="es-record-chain" data-chain></span>
+        </div>
+        <div class="es-record-table"><table><thead><tr><th>Time</th><th>What happened</th><th>Who</th><th>From</th></tr></thead><tbody data-rows></tbody></table></div>
+      </div>
+      <div class="es-row" style="margin-top:1rem" data-actions></div>
+      <div class="es-note hidden" data-check style="margin-top:0.8rem"></div>
+      <p class="es-sub es-record-keep" data-keep></p>
+    </div>`;
+  const q = <T extends HTMLElement = HTMLElement>(sel: string) => wrap.querySelector(sel) as T;
+  q('[data-title]').textContent = env.title || env.docName;
+  const chip = (text: string, kind = '') => {
+    const c = document.createElement('span');
+    c.className = `es-chip${kind ? ` ${kind}` : ''}`;
+    c.textContent = text;
+    q('[data-chips]').appendChild(c);
+  };
+  chip(state.status === 'complete' ? `Completed · ${signed} of ${state.n} signed` : state.status === 'declined' ? 'Declined' : `${signed} of ${state.n} signed`, state.status === 'complete' ? 'es-good' : state.status === 'declined' ? 'es-bad' : '');
+  if (state.sealed) chip('Sealed', 'es-good');
+  const facts: [string, string, boolean?][] = [
+    ['Signed PDF fingerprint (SHA-256)', state.sealed?.fingerprint || 'Recorded when the signed copy is first opened', !!state.sealed],
+    ['Sealed', state.sealed ? `${formatDate(state.sealed.at, true)}, Paperhaus certificate` : 'Not yet'],
+    ['Timestamp', state.sealed?.timestamp ? `${state.sealed.timestamp.by} time server (RFC 3161)${state.sealed.timestamp.at ? `, ${formatDate(state.sealed.timestamp.at, true)}` : ''}` : state.sealed ? 'No time server answered' : 'Added with the seal'],
+  ];
+  for (const [k, v, mono] of facts) {
+    const d = document.createElement('div');
+    d.className = 'es-record-fact';
+    d.innerHTML = '<div class="es-record-k"></div><div class="es-record-v"></div>';
+    d.querySelector('.es-record-k')!.textContent = k;
+    const val = d.querySelector<HTMLElement>('.es-record-v')!;
+    val.textContent = v;
+    if (mono) val.classList.add('es-mono');
+    q('[data-facts]').appendChild(d);
+  }
+  const chainEl = q('[data-chain]');
+  if (!events.length) chainEl.textContent = 'This request was made before the audit trail existed.';
+  else {
+    chainEl.innerHTML = `<i class="ph ${chain.ok ? 'ph-link' : 'ph-link-break'}"></i> <span></span>`;
+    chainEl.classList.add(chain.ok ? 'es-ok' : 'es-broken');
+    chainEl.querySelector('span')!.textContent = chain.ok ? `Chain intact: ${chain.good} of ${events.length} entries check out` : `Chain broken at entry ${(chain.bad ?? 0) + 1}`;
+  }
+  for (const e of events) {
+    const tr = document.createElement('tr');
+    for (const v of [formatDate(e.t, true), eventText(e, env), whoName(e, env), eventFrom(e)]) {
+      const td = document.createElement('td');
+      td.textContent = v;
+      tr.appendChild(td);
+    }
+    q('[data-rows]').appendChild(tr);
+  }
+  const btn = (html: string, fn: () => void, primary = false) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `es-btn es-small${primary ? ' es-primary' : ''}`;
+    b.innerHTML = html;
+    b.addEventListener('click', fn);
+    q('[data-actions]').appendChild(b);
+  };
+  if (onDownload && state.status === 'complete') btn('<i class="ph ph-download-simple"></i> Download signed PDF', onDownload, true);
+  if (events.length) {
+    btn('<i class="ph ph-table"></i> Export audit trail (CSV)', () => {
+      const name = `${(env.docName || env.title || 'document').replace(/\.pdf$/i, '')} audit trail.csv`;
+      saveBlob(new Blob([auditCsv(events, env, state)], { type: 'text/csv' }), name);
+    });
+  }
+  if (state.sealed) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/pdf,.pdf';
+    input.hidden = true;
+    q('[data-actions]').appendChild(input);
+    btn('<i class="ph ph-magnifying-glass"></i> Check a copy of this PDF', () => input.click());
+    input.addEventListener('change', async () => {
+      const f = input.files?.[0];
+      input.value = '';
+      if (!f) return;
+      const same = (await sha256hex(new Uint8Array(await f.arrayBuffer()))) === state.sealed!.fingerprint;
+      const n = q('[data-check]');
+      n.className = `es-note ${same ? 'es-good' : 'es-bad'}`;
+      n.textContent = same
+        ? `"${f.name}" is the signed original, exactly as sealed.`
+        : `"${f.name}" is not the signed original. It was changed, or it is a different file.`;
+    });
+  }
+  const until = state.retainUntil || state.expires;
+  q('[data-keep]').textContent = `Kept by Paperhaus until ${formatDate(until)}, encrypted, so only people with a signing link can open it.`;
+  const close = () => {
+    wrap.remove();
+    document.body.classList.remove('es-noscroll');
+  };
+  q('[data-close]').addEventListener('click', close);
+  wrap.addEventListener('click', (e) => {
+    if (e.target === wrap) close();
+  });
+  document.addEventListener('keydown', function esc(e) {
+    if (e.key === 'Escape') {
+      close();
+      document.removeEventListener('keydown', esc);
+    }
+  });
+  document.body.appendChild(wrap);
+  document.body.classList.add('es-noscroll');
 }

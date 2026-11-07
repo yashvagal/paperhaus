@@ -244,6 +244,19 @@
         menu.appendChild(el('a', { href: srcUrl, target: '_blank', rel: 'noopener', role: 'menuitem', class: 'ph-menu-item', title: 'Built on BentoPDF (AGPL-3.0)' },
           '<i class="ph ph-code" aria-hidden="true"></i> Source code'));
       }
+      // Recent files live only in this browser (flow.js); this empties that list.
+      if (window.paperhausFlow) {
+        var clear = el('button', { type: 'button', role: 'menuitem', class: 'ph-menu-item' },
+          '<i class="ph ph-broom" aria-hidden="true"></i> Clear recent files');
+        clear.addEventListener('click', function () {
+          window.paperhausFlow.clear().then(function () {
+            clear.innerHTML = '<i class="ph ph-check" aria-hidden="true"></i> Recent files cleared';
+            var list = document.getElementById('ph-recent-list');
+            if (list) list.innerHTML = '<p class="ph-muted">Files you make here show up on this device, so you can keep working on them. Nothing is uploaded.</p>';
+          });
+        });
+        menu.appendChild(clear);
+      }
       var out = el('a', { href: '/cdn-cgi/access/logout', role: 'menuitem', class: 'ph-menu-item' },
         '<i class="ph ph-sign-out" aria-hidden="true"></i> Sign out');
       out.addEventListener('click', function () {

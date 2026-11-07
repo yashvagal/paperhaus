@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Request Signatures | BentoPDF</title>
+    <title>Sign | BentoPDF</title>
     <meta
       name="description"
-      content="Send a PDF for signature. Place fields for each signer, email them a private link from your own email, and get back a signed PDF with a signing certificate."
+      content="Sign a PDF yourself, sign it with others, or send it out for signature. Every signed PDF is sealed, timestamped and comes with a signing record."
     />
     <link rel="canonical" href="https://www.bentopdf.com/request-signatures" />
     <link href="/src/css/styles.css" rel="stylesheet" />
@@ -25,12 +25,10 @@
         <i data-lucide="arrow-left" class="cursor-pointer"></i>
         <span class="cursor-pointer">Back to Tools</span>
       </button>
-      <h1 class="es-h1">Request Signatures</h1>
-      <p class="es-sub" style="margin-top: 0.4rem; max-width: 42rem">
-        Place fields for each signer, then email everyone their own private link from your
-        own email. They sign in their browser, no account needed, and you get back a signed
-        PDF with a signing certificate. The document is encrypted on this device and deleted
-        14 days after sending.
+      <h1 class="es-h1">Sign</h1>
+      <p class="es-sub" style="margin-top: 0.4rem; max-width: 46rem">
+        One tool for signing yourself, signing with others, and sending to others. Signers
+        need no account. The document is encrypted on this device before it goes anywhere.
       </p>
 
       <!-- Sent requests -->
@@ -42,8 +40,25 @@
         <div id="es-sent-list"></div>
       </section>
 
-      <!-- Step 1 -->
+      <div class="es-layout">
+      <div class="es-main">
       <section class="es-card" style="margin-top: 1.2rem">
+        <h2 class="es-h2">Who's signing?</h2>
+        <div class="es-modes" id="es-modes" role="radiogroup" aria-label="Who's signing?">
+          <button type="button" class="es-mode" data-mode="me" role="radio" aria-checked="false">
+            <strong>Just me</strong><span>Sign it yourself and download it.</span>
+          </button>
+          <button type="button" class="es-mode" data-mode="meothers" role="radio" aria-checked="false">
+            <strong>Me and others</strong><span>You sign, then others sign from a private link.</span>
+          </button>
+          <button type="button" class="es-mode" data-mode="others" role="radio" aria-checked="false">
+            <strong>Only others</strong><span>Send it out. You get it back signed.</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Step 1 -->
+      <section class="es-card" data-step>
         <h2 class="es-h2"><span class="es-step">1</span> Document</h2>
         <label id="es-drop" class="es-drop" for="es-file">
           <i class="ph ph-file-pdf"></i>
@@ -66,7 +81,7 @@
       </section>
 
       <!-- Step 2 -->
-      <section class="es-card">
+      <section class="es-card" id="es-signers-card" data-step>
         <h2 class="es-h2"><span class="es-step">2</span> Signers</h2>
         <div id="es-signers"></div>
         <div class="es-row" style="margin-top: 0.4rem">
@@ -80,7 +95,7 @@
       </section>
 
       <!-- Step 3 -->
-      <section class="es-card">
+      <section class="es-card" data-step>
         <h2 class="es-h2"><span class="es-step">3</span> Fields</h2>
         <p class="es-sub" style="margin-bottom: 0.8rem">
           Pick a signer and a field, then tap the page where it goes. Drag to move, pull the
@@ -102,10 +117,10 @@
       </section>
 
       <!-- Step 4 -->
-      <section class="es-card">
-        <h2 class="es-h2"><span class="es-step">4</span> Send</h2>
+      <section class="es-card" data-step>
+        <h2 class="es-h2"><span class="es-step">4</span> <span id="es-send-title">Send</span></h2>
         <div style="display: grid; gap: 0.8rem">
-          <label class="es-label">
+          <label class="es-label" data-not-me>
             Send from (your email)
             <input id="es-from" class="es-input" type="email" placeholder="you@example.com" autocomplete="email" />
             <span class="es-sub" style="font-weight: 400">The invitations go out from this account, through Gmail, Outlook or your email app.</span>
@@ -114,12 +129,12 @@
             Your name
             <input id="es-from-name" class="es-input" type="text" maxlength="80" />
           </label>
-          <label class="es-label">
+          <label class="es-label" data-not-me>
             Message (optional)
             <textarea id="es-message" class="es-textarea" maxlength="1500" placeholder="Hi, please sign this when you get a chance."></textarea>
           </label>
           <div class="es-row">
-            <button id="es-create" class="es-btn es-primary" type="button"><i class="ph ph-paper-plane-tilt"></i> Create signing links</button>
+            <button id="es-create" class="es-btn es-primary" type="button"><i class="ph ph-paper-plane-tilt"></i> <span>Create signing links</span></button>
             <span id="es-create-hint" class="es-sub"></span>
           </div>
         </div>
@@ -137,6 +152,32 @@
           <button id="es-new" class="es-btn" type="button"><i class="ph ph-plus"></i> Start another</button>
         </div>
       </section>
+      </div>
+
+      <aside class="es-aside">
+        <section class="es-card">
+          <h2 class="es-h2" style="margin-bottom: 0.3rem">Added automatically</h2>
+          <p class="es-sub" style="margin-bottom: 0.9rem">Nothing extra for you or your signers to do.</p>
+          <ul class="es-auto">
+            <li><i class="ph ph-seal-check"></i><div><strong>Tamper seal</strong><span>The finished PDF is sealed with a certificate. Any later change shows as broken.</span></div></li>
+            <li><i class="ph ph-clock"></i><div><strong>Trusted timestamp</strong><span>An independent time server stamps when it was sealed.</span></div></li>
+            <li><i class="ph ph-tag"></i><div><strong>Reason for each signature</strong><span>Author, Approved, Reviewed and more. Filled in for you, changeable.</span></div></li>
+            <li><i class="ph ph-file-text"></i><div><strong>Signing record</strong><span>Names, emails, times, devices and the document fingerprint, in the PDF.</span></div></li>
+            <li><i class="ph ph-link"></i><div><strong>Locked audit trail</strong><span>Every step is chained, so no entry can be changed or removed unnoticed.</span></div></li>
+          </ul>
+        </section>
+        <section class="es-card">
+          <h2 class="es-h2" style="margin-bottom: 0.6rem">Keep signed records for</h2>
+          <div class="es-keep" id="es-keep" role="radiogroup" aria-label="Keep signed records for">
+            <button type="button" data-keep="14" role="radio">14 days</button>
+            <button type="button" data-keep="365" role="radio">1 year</button>
+            <button type="button" data-keep="2555" role="radio">7 years</button>
+          </div>
+          <p class="es-sub" style="margin-top: 0.7rem">Encrypted, so only people with a signing link can open it. Set once here, used for every request.</p>
+        </section>
+        <p class="es-sub es-aside-note">Have your own signing certificate (.pfx)? Use <a href="digital-sign-pdf.html">Digital Signature</a>.</p>
+      </aside>
+      </div>
     </main>
 
     <div id="es-busy" class="es-busy hidden"><div class="es-busy-card"><div class="es-spin"></div><span id="es-busy-text">Working...</span></div></div>

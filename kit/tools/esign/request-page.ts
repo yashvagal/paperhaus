@@ -18,16 +18,18 @@ import {
   type Submission,
   ApiError,
   FIELD_LABELS,
+  REASONS,
   SIGNER_COLORS,
   api,
   b64url,
-  buildSignedPdf,
   decrypt,
   decryptJson,
   downloadBytes,
   encrypt,
   escapeHtml,
+  finalCopy,
   formatDate,
+  openRecord,
   fromB64,
   openPdf,
   randomToken,
@@ -42,9 +44,11 @@ interface Draft {
   bytes: Uint8Array | null;
   pdf: PdfDoc | null;
   pages: number;
-  signers: { name: string; email: string }[];
+  signers: { name: string; email: string; reason: string; me?: boolean }[];
   fields: Field[];
 }
+
+type Mode = 'me' | 'meothers' | 'others';
 
 interface Sent {
   id: string;
@@ -56,15 +60,17 @@ interface Sent {
   from: string;
   fromName: string;
   message: string;
-  signers: { name: string; email: string }[];
+  signers: { name: string; email: string; reason?: string }[];
   createdAt: number;
   expires: number;
+  retainUntil?: number;
   ordered: boolean;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const draft: Draft = { file: null, bytes: null, pdf: null, pages: 0, signers: [], fields: [] };
-const ui = { who: 0, tool: null as FieldType | null, selected: '' };
+const ui = { who: 0, tool: null as FieldType | null, selected: '', mode: 'meothers' as Mode };
+const KEEP_DAYS = [14, 365, 2555];
 let identity = { email: '', name: '' };
 
 // Default box sizes, as fractions of the page width (height follows the page shape).
@@ -210,10 +216,18 @@ function renderSigners(): void {
       <span class="es-order"><span class="es-dot" style="display:inline-block;background:${SIGNER_COLORS[i % SIGNER_COLORS.length]}"></span></span>
       <input class="es-input es-signer-name" type="text" placeholder="Full name" maxlength="80" />
       <input class="es-input es-signer-email" type="email" placeholder="Email" maxlength="120" />
+      <label class="es-reason"><span>Signs as</span><select class="es-input"></select></label>
       <button class="es-btn es-small es-danger" type="button" aria-label="Remove signer"><i class="ph ph-trash"></i></button>`;
     const [name, email] = row.querySelectorAll('input');
     name.value = s.name;
     email.value = s.email;
+    if (s.me) {
+      row.classList.add('es-signer-me');
+      name.title = 'You';
+    }
+    const reason = row.querySelector('select')!;
+    for (const r of REASONS) reason.add(new Option(r, r, false, r === s.reason));
+    reason.addEventListener('change', () => (s.reason = reason.value));
     name.addEventListener('input', () => {
       s.name = name.value;
       renderWhos();
@@ -227,12 +241,12 @@ function renderSigners(): void {
   renderWhos();
 }
 
-function addSigner(name = '', email = ''): void {
+function addSigner(name = '', email = '', me = false): void {
   if (draft.signers.length >= 10) {
     showAlert('Up to 10 signers', 'A signing request can have up to 10 signers.');
     return;
   }
-  draft.signers.push({ name, email });
+  draft.signers.push({ name, email, reason: me ? 'Author' : 'Approved', me });
   ui.who = draft.signers.length - 1;
   renderSigners();
 }
@@ -254,7 +268,7 @@ function renderWhos(): void {
     b.className = 'es-who' + (i === ui.who ? ' is-on' : '');
     b.style.setProperty('--c', SIGNER_COLORS[i % SIGNER_COLORS.length]);
     b.innerHTML = `<span class="es-dot" style="background:${SIGNER_COLORS[i % SIGNER_COLORS.length]}"></span><span></span>`;
-    b.querySelector('span:last-child')!.textContent = s.name.trim() || `Signer ${i + 1}`;
+    b.querySelector('span:last-child')!.textContent = (s.me ? `${s.name.trim() || 'You'} (you)` : s.name.trim()) || `Signer ${i + 1}`;
     b.addEventListener('click', () => {
       ui.who = i;
       renderWhos();
@@ -262,6 +276,82 @@ function renderWhos(): void {
     host.appendChild(b);
   });
   if (!draft.signers.length) host.innerHTML = '<span class="es-sub">Add a signer first</span>';
+}
+
+// ------------------------------------------------------------------ who's signing
+
+function myself(): { name: string; email: string } {
+  const email = $<HTMLInputElement>('es-from').value.trim() || identity.email;
+  const name = $<HTMLInputElement>('es-from-name').value.trim() || identity.name || email.split('@')[0] || '';
+  return { name, email };
+}
+
+/** Put "me" first in the signer list (or take me out), moving the fields with each signer. */
+function placeMe(wanted: boolean): void {
+  const at = draft.signers.findIndex((s) => s.me);
+  if (wanted && at === 0) return;
+  if (!wanted && at < 0) return;
+  const order = draft.signers.map((_, i) => i);
+  if (at > 0) {
+    order.splice(at, 1);
+    order.unshift(at);
+  }
+  if (!wanted) order.splice(order.indexOf(at), 1);
+  const shift = wanted && at < 0 ? 1 : 0;
+  const remap = new Map(order.map((oldI, newI) => [oldI, newI + shift]));
+  const next = order.map((i) => draft.signers[i]);
+  if (shift) {
+    const me = myself();
+    next.unshift({ name: me.name, email: me.email, reason: 'Author', me: true });
+  }
+  draft.signers = next;
+  draft.fields = draft.fields.filter((f) => remap.has(f.signer)).map((f) => ({ ...f, signer: remap.get(f.signer)! }));
+}
+
+function setMode(mode: Mode, user = true): void {
+  ui.mode = mode;
+  if (user) prefs.set('mode', mode);
+  document.querySelectorAll<HTMLElement>('#es-modes .es-mode').forEach((b) => {
+    const on = b.dataset.mode === mode;
+    b.classList.toggle('is-on', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+  if (mode === 'me') {
+    placeMe(true);
+    draft.fields = draft.fields.filter((f) => f.signer === 0);
+    draft.signers = [draft.signers[0]];
+  } else if (mode === 'meothers') {
+    placeMe(true);
+    $<HTMLInputElement>('es-ordered').checked = true;
+  } else {
+    placeMe(false);
+  }
+  ui.who = mode === 'meothers' && draft.signers.length > 1 ? 1 : 0;
+  $('es-signers-card').classList.toggle('hidden', mode === 'me');
+  document.querySelectorAll<HTMLElement>('[data-not-me]').forEach((el) => el.classList.toggle('hidden', mode === 'me'));
+  $('es-send-title').textContent = mode === 'me' ? 'Sign' : 'Send';
+  $('es-create').querySelector('span')!.textContent = mode === 'me' ? 'Sign now' : mode === 'meothers' ? 'Create links, then sign first' : 'Create signing links';
+  $('es-create').querySelector('i')!.className = mode === 'me' ? 'ph ph-signature' : 'ph ph-paper-plane-tilt';
+  let n = 0;
+  document.querySelectorAll<HTMLElement>('[data-step]').forEach((card) => {
+    if (!card.classList.contains('hidden')) card.querySelector('.es-step')!.textContent = String(++n);
+  });
+  renderSigners();
+  renderFields();
+}
+
+function keepDays(): number {
+  const v = Number(prefs.get('keep'));
+  return KEEP_DAYS.includes(v) ? v : 365;
+}
+
+function renderKeep(): void {
+  const v = keepDays();
+  document.querySelectorAll<HTMLElement>('#es-keep button').forEach((b) => {
+    const on = Number(b.dataset.keep) === v;
+    b.classList.toggle('is-on', on);
+    b.setAttribute('aria-checked', String(on));
+  });
 }
 
 // ------------------------------------------------------------------ fields
@@ -275,7 +365,7 @@ function setTool(t: FieldType | null): void {
 function placeField(e: PointerEvent, box: HTMLElement): void {
   if (!ui.tool || (e.target as HTMLElement).closest('.es-field')) return;
   if (!draft.signers.length) {
-    showAlert('Add a signer first', 'Each field belongs to a signer. Add one in step 2.');
+    showAlert('Add a signer first', 'Each field belongs to a signer. Add one under Signers.');
     return;
   }
   const r = box.getBoundingClientRect();
@@ -313,7 +403,7 @@ function renderFields(): void {
     el.style.top = `${f.y * 100}%`;
     el.style.width = `${f.w * 100}%`;
     el.style.height = `${f.h * 100}%`;
-    const who = draft.signers[f.signer]?.name.trim().split(/\s+/)[0] || `Signer ${f.signer + 1}`;
+    const who = (draft.signers[f.signer]?.me && ui.mode === 'me' ? 'You' : draft.signers[f.signer]?.name.trim().split(/\s+/)[0]) || `Signer ${f.signer + 1}`;
     el.innerHTML = `<span class="es-field-label"></span><span class="es-x" role="button" aria-label="Remove field">&times;</span><span class="es-grip"></span>`;
     el.querySelector('.es-field-label')!.textContent = f.type === 'checkbox' ? '' : `${FIELD_LABELS[f.type]} · ${who}`;
     el.title = `${FIELD_LABELS[f.type]} for ${who}`;
@@ -370,7 +460,7 @@ function updateCreateHint(): void {
   const hint = $('es-create-hint');
   if (!draft.bytes) hint.textContent = 'Choose a PDF first.';
   else if (!draft.signers.length) hint.textContent = 'Add at least one signer.';
-  else if (missing.length) hint.textContent = `No fields yet for ${missing.map(({ s, i }) => s.name || `Signer ${i + 1}`).join(', ')}.`;
+  else if (missing.length) hint.textContent = ui.mode === 'me' ? 'Place your signature on the page.' : `No fields yet for ${missing.map(({ s, i }) => s.name || `Signer ${i + 1}`).join(', ')}.`;
   else hint.textContent = `${draft.fields.length} field${draft.fields.length === 1 ? '' : 's'} for ${draft.signers.length} signer${draft.signers.length === 1 ? '' : 's'}.`;
 }
 
@@ -383,22 +473,28 @@ async function create(): Promise<void> {
   const message = $<HTMLTextAreaElement>('es-message').value.trim();
   const ordered = $<HTMLInputElement>('es-ordered').checked;
 
-  if (!draft.bytes || !draft.file) return showAlert('Choose a PDF', 'Add the document in step 1.');
-  if (!draft.signers.length) return showAlert('Add a signer', 'Add at least one signer in step 2.');
+  if (!draft.bytes || !draft.file) return showAlert('Choose a PDF', 'Add the document first.');
+  const meNow = myself();
+  const s0 = draft.signers.find((s) => s.me);
+  if (s0) {
+    if (!s0.name.trim()) s0.name = meNow.name;
+    if (!s0.email.trim()) s0.email = meNow.email;
+  }
+  if (!draft.signers.length) return showAlert('Add a signer', 'Add at least one signer.');
   for (const [i, s] of draft.signers.entries()) {
-    if (!s.name.trim()) return showAlert('Name needed', `Add a name for signer ${i + 1}.`);
+    if (!s.name.trim()) return showAlert('Name needed', s.me ? 'Add your name.' : `Add a name for signer ${i + 1}.`);
     if (!validEmail(s.email)) return showAlert('Email needed', `Check the email address for ${s.name || `signer ${i + 1}`}.`);
   }
   for (const [i, s] of draft.signers.entries()) {
     if (!draft.fields.some((f) => f.signer === i && (f.type === 'signature' || f.type === 'initials'))) {
-      return showAlert('A signature field is missing', `Place at least one Signature or Initials field for ${s.name}.`);
+      return showAlert('A signature field is missing', s.me && ui.mode === 'me' ? 'Choose Signature, then tap the page where you sign.' : `Place at least one Signature or Initials field for ${s.name}.`);
     }
   }
   if (!validEmail(from)) return showAlert('Your email', 'Add the email address you will send the invitations from.');
   prefs.set('from', from);
   prefs.set('from-name', fromName);
 
-  busy('Encrypting and creating links...');
+  busy(ui.mode === 'me' ? 'Encrypting...' : 'Encrypting and creating links...');
   try {
     const key = crypto.getRandomValues(new Uint8Array(32));
     const tokens = draft.signers.map(() => randomToken());
@@ -413,7 +509,7 @@ async function create(): Promise<void> {
       sender: { name: fromName, email: from },
       ordered,
       createdAt: Date.now(),
-      signers: draft.signers.map((s) => ({ name: s.name.trim(), email: s.email.trim() })),
+      signers: draft.signers.map((s) => ({ name: s.name.trim(), email: s.email.trim(), reason: s.reason || 'Signer' })),
       fields: draft.fields,
       readToken,
     };
@@ -426,6 +522,8 @@ async function create(): Promise<void> {
         tokens: await Promise.all(tokens.map((t) => sha256hex(t))),
         senderToken: await sha256hex(senderToken),
         readToken: await sha256hex(readToken),
+        keepDays: keepDays(),
+        docSha256: envelope.docSha256,
       })
     );
     form.append('doc', new Blob([(await encrypt(key, draft.bytes)) as BlobPart]), 'doc');
@@ -444,9 +542,15 @@ async function create(): Promise<void> {
       signers: envelope.signers,
       createdAt: envelope.createdAt,
       expires: res.expires,
+      retainUntil: (res as { retainUntil?: number }).retainUntil,
       ordered,
     };
     await saveSent(sent);
+    if (ui.mode === 'me') {
+      // Straight to signing, in this tab. The signing page offers the sealed copy after.
+      location.href = signLink(sent.id, key, tokens[0]);
+      return;
+    }
     showReady(sent);
     void renderSent();
   } catch (err) {
@@ -537,7 +641,7 @@ function showReady(s: Sent): void {
 // ------------------------------------------------------------------ sent requests
 
 async function renderSent(): Promise<void> {
-  const list = (await listSent()).filter((s) => s.expires > Date.now());
+  const list = (await listSent()).filter((s) => (s.retainUntil || s.expires) > Date.now());
   $('es-sent').classList.toggle('hidden', !list.length);
   const host = $('es-sent-list');
   host.textContent = '';
@@ -551,7 +655,8 @@ async function renderSent(): Promise<void> {
       </div>
       <div class="es-sendlist es-env-signers" style="margin-top:0.6rem"></div>`;
     item.querySelector('.es-env-title')!.textContent = s.title;
-    item.querySelector('.es-env-when')!.textContent = `Sent ${formatDate(s.createdAt)} · open until ${formatDate(s.expires)}`;
+    item.querySelector('.es-env-when')!.textContent =
+      s.expires > Date.now() ? `Sent ${formatDate(s.createdAt)} · open to sign until ${formatDate(s.expires)}` : `Sent ${formatDate(s.createdAt)} · kept until ${formatDate(s.retainUntil || s.expires)}`;
     host.appendChild(item);
     void fillSent(item, s);
   }
@@ -581,7 +686,7 @@ async function fillSent(item: HTMLElement, s: Sent): Promise<void> {
   const chip = document.createElement('span');
   chip.className = 'es-chip' + (state.status === 'complete' ? ' es-good' : state.status === 'declined' ? ' es-bad' : '');
   chip.textContent =
-    state.status === 'complete' ? 'Completed' : state.status === 'declined' ? 'Declined' : `${signed} of ${state.n} signed`;
+    state.status === 'complete' ? (state.sealed ? 'Completed · sealed' : 'Completed') : state.status === 'declined' ? 'Declined' : state.status === 'expired' ? 'Time ran out' : `${signed} of ${state.n} signed`;
   actions.appendChild(chip);
 
   if (state.status === 'complete') {
@@ -591,6 +696,11 @@ async function fillSent(item: HTMLElement, s: Sent): Promise<void> {
     dl.onclick = () => void downloadSigned(s, state);
     actions.appendChild(dl);
   }
+  const rec = document.createElement('button');
+  rec.className = 'es-btn es-small';
+  rec.innerHTML = '<i class="ph ph-file-text"></i> Signing record';
+  rec.onclick = () => void showRecord(s);
+  actions.appendChild(rec);
   const cancel = document.createElement('button');
   cancel.className = 'es-btn es-small es-danger';
   cancel.innerHTML = state.status === 'complete' ? '<i class="ph ph-trash"></i> Delete' : '<i class="ph ph-x"></i> Cancel';
@@ -628,7 +738,7 @@ async function fillSent(item: HTMLElement, s: Sent): Promise<void> {
     const m = {
       to: s.signers.map((x) => x.email).join(','),
       subject: `Signed: ${s.title}`,
-      body: `Hi all,\n\nEveryone has signed "${s.title}". Download the signed PDF here:\n${link}\n\nThe link works until ${formatDate(s.expires)}.\n\n${s.fromName}`,
+      body: `Hi all,\n\nEveryone has signed "${s.title}". Download the signed PDF here:\n${link}\n\nThe link works until ${formatDate(state.retainUntil || s.expires)}.\n\n${s.fromName}`,
     };
     const l = composeLinks(m, s.from);
     const btns = document.createElement('div');
@@ -643,7 +753,7 @@ async function fillSent(item: HTMLElement, s: Sent): Promise<void> {
 }
 
 async function downloadSigned(s: Sent, state: State): Promise<void> {
-  busy('Building the signed PDF...');
+  busy(state.sealed ? 'Opening the signed PDF...' : 'Building and sealing the signed PDF...');
   try {
     const key = fromB64(s.key);
     const full = await api.state(s.id, s.senderToken);
@@ -652,11 +762,27 @@ async function downloadSigned(s: Sent, state: State): Promise<void> {
     const raw = await api.subs(s.id, s.senderToken);
     const subs: (Submission | null)[] = new Array(env.signers.length).fill(null);
     for (const r of raw) subs[r.index] = await decryptJson<Submission>(key, fromB64(r.data));
-    const out = await buildSignedPdf(doc, env, full || state, subs);
-    downloadBytes(out, signedName(env));
+    const out = await finalCopy({ id: s.id, key, token: s.senderToken }, env, full || state, doc, subs);
+    downloadBytes(out.pdf, signedName(env));
+    if (!out.sealed) toast('Downloaded without the seal. Try again later for the sealed copy.');
+    void renderSent();
   } catch (err) {
     console.error(err);
     showAlert('Could not build the signed PDF', String((err as Error).message || err));
+  } finally {
+    busy(null);
+  }
+}
+
+async function showRecord(s: Sent): Promise<void> {
+  busy('Opening the signing record...');
+  try {
+    const key = fromB64(s.key);
+    const st = await api.state(s.id, s.senderToken);
+    const env = await decryptJson<Envelope>(key, fromB64(st.envelope!));
+    await openRecord(env, st, st.status === 'complete' ? () => void downloadSigned(s, st) : null);
+  } catch (err) {
+    showAlert('Could not open the signing record', String((err as Error).message || err));
   } finally {
     busy(null);
   }
@@ -666,7 +792,7 @@ async function cancelSent(s: Sent, done: boolean): Promise<void> {
   const ok = await confirmBox(
     done ? 'Delete this request?' : 'Cancel this request?',
     done
-      ? 'The signed copy is removed from Paperhaus now instead of in 14 days. Download it first if you need it.'
+      ? 'The signed copy and its signing record are removed from Paperhaus now. Download them first if you need them.'
       : 'The signing links stop working, and the document is deleted from Paperhaus.'
   );
   if (!ok) return;
@@ -713,7 +839,7 @@ function resetDraft(): void {
   $<HTMLTextAreaElement>('es-message').value = '';
   $('es-pages').innerHTML = '<p class="es-sub">Choose a PDF first.</p>';
   $('es-ready').classList.add('hidden');
-  renderSigners();
+  setMode(ui.mode, false);
   updateCreateHint();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -733,6 +859,13 @@ async function loadIdentity(): Promise<void> {
   const from = $<HTMLInputElement>('es-from');
   from.value = prefs.get('from') || identity.email;
   $<HTMLInputElement>('es-from-name').value = prefs.get('from-name') || identity.name;
+  const me = draft.signers.find((s) => s.me);
+  if (me) {
+    const m = myself();
+    if (!me.name) me.name = m.name;
+    if (!me.email) me.email = m.email;
+    renderSigners();
+  }
 }
 
 function init(): void {
@@ -758,11 +891,29 @@ function init(): void {
   $('es-doc-change').addEventListener('click', () => input.click());
   $('es-add').addEventListener('click', () => addSigner());
   $('es-add-me').addEventListener('click', () => {
-    const email = $<HTMLInputElement>('es-from').value.trim() || identity.email;
-    const name = $<HTMLInputElement>('es-from-name').value.trim() || identity.name;
-    if (draft.signers.some((s) => s.email.toLowerCase() === email.toLowerCase() && email)) return toast('You are already a signer');
-    addSigner(name, email);
+    if (draft.signers.some((s) => s.me)) return toast('You are already a signer');
+    if (ui.mode === 'others') return setMode('meothers');
+    const m = myself();
+    addSigner(m.name, m.email, true);
   });
+  document.querySelectorAll<HTMLElement>('#es-modes .es-mode').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode as Mode)));
+  document.querySelectorAll<HTMLElement>('#es-keep button').forEach((b) =>
+    b.addEventListener('click', () => {
+      prefs.set('keep', String(b.dataset.keep));
+      renderKeep();
+    })
+  );
+  for (const id of ['es-from-name', 'es-from']) {
+    $<HTMLInputElement>(id).addEventListener('input', () => {
+      const me = draft.signers.find((s) => s.me);
+      if (!me) return;
+      const m = myself();
+      me.name = m.name;
+      me.email = m.email;
+      renderSigners();
+      renderFields();
+    });
+  }
   document.querySelectorAll<HTMLElement>('#es-types .es-tool').forEach((b) => b.addEventListener('click', () => setTool(b.dataset.type as FieldType)));
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') setTool(null);
@@ -780,7 +931,11 @@ function init(): void {
     clearTimeout(resizeTimer);
     resizeTimer = window.setTimeout((): void => void drawPages(), 300);
   });
-  renderSigners();
+  const asked = new URLSearchParams(location.search).get('mode') as Mode | null;
+  const saved = prefs.get('mode') as Mode;
+  const modes: Mode[] = ['me', 'meothers', 'others'];
+  setMode(asked && modes.includes(asked) ? asked : modes.includes(saved) ? saved : 'meothers', false);
+  renderKeep();
   updateCreateHint();
   void loadIdentity();
   void renderSent();

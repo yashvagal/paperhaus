@@ -1,14 +1,22 @@
 /**
  * Paperhaus e-sign API (Cloudflare Pages Function).
  *
- * Holds signing requests ("envelopes") for up to 14 days, then Cloudflare deletes them on
- * its own. Everything it keeps about the document is encrypted in the sender's browser
+ * Holds signing requests ("envelopes"). Signers have 14 days to sign; the signed record
+ * is then kept as long as the sender chose (14 days, 1 year or 7 years), and Cloudflare
+ * deletes it on its own after that. Everything it keeps about the document is encrypted in the sender's browser
  * first: the PDF, the field layout, names and email addresses. The key travels only in
  * the signing links, after the # in the address, which browsers never send to a server.
  * So this code stores and hands back encrypted bytes it cannot read, plus the times, IP
  * addresses and browsers of each view and signature for the audit certificate.
  *
  * Storage: one KV namespace bound as ESIGN (Pages project, Settings, Bindings).
+ *
+ * Every step (created, opened, signed, declined, completed, sealed) is written to an audit
+ * trail where each entry carries the SHA-256 of the one before it, so an entry cannot be
+ * changed or removed without breaking the chain. When everyone has signed, the finished
+ * PDF is sealed with the Paperhaus certificate and an independent timestamp (see
+ * functions/_shared/seal.js); only a hash of the PDF is sent for that. The sealed copy is
+ * stored encrypted, with its SHA-256 fingerprint in the clear so any copy can be checked.
  *
  * Routes
  *   POST /api/esign/new                 create (Paperhaus sign-in required, by Cloudflare Access)
@@ -19,16 +27,24 @@
  *   POST /api/esign/p/:id/sign?t=       a signer submits (body: encrypted values)
  *   POST /api/esign/p/:id/decline?t=    a signer declines (body: encrypted reason, optional)
  *   POST /api/esign/p/:id/cancel?t=     the sender cancels and deletes it
+ *   POST /api/esign/p/:id/seal?t=       seal a finished PDF (body: JSON { digest: hex })
+ *   POST /api/esign/p/:id/final?t=      store the sealed copy (body: encrypted PDF, x-fingerprint header)
+ *   GET  /api/esign/p/:id/final?t=      the sealed copy (encrypted)
  *
  * The /p/ routes are public (Access bypass) and need a token from a signing link: each
  * signer has their own, the sender has one, and a read-only one opens the finished copy.
  * Only SHA-256 hashes of the tokens are stored.
  */
 
-const DAYS = 14;
+import { sealDigest, b64 as b64u8 } from '../../_shared/seal.js';
+
+const DAYS = 14; // time to sign
+const KEEP = [14, 365, 2555]; // how long the signed record is kept: 14 days, 1 year, 7 years
 const MAX_SIGNERS = 10;
 const MAX_DOC = 20 * 1024 * 1024; // KV values max out at 25 MiB
+const MAX_FINAL = 24 * 1024 * 1024;
 const MAX_SMALL = 2 * 1024 * 1024; // envelope, each signature submission
+const MAX_SEALS = 3; // seal calls per request (one is normal; retries after a failed upload)
 
 export async function onRequest(context) {
   const { request, env, params } = context;
@@ -55,6 +71,9 @@ export async function onRequest(context) {
       if (method === 'POST' && action === 'sign') return await sign(request, env, id, meta, who);
       if (method === 'POST' && action === 'decline') return await decline(request, env, id, meta, who);
       if (method === 'POST' && action === 'cancel') return await cancel(env, id, meta, who);
+      if (method === 'POST' && action === 'seal') return await seal(request, env, id, meta);
+      if (method === 'POST' && action === 'final') return await storeFinal(request, env, id, meta, who);
+      if (method === 'GET' && action === 'final') return bytes(await env.ESIGN.get(`f:${id}`, 'arrayBuffer'));
     }
     return json({ error: 'not_found' }, 404);
   } catch (err) {
@@ -82,9 +101,10 @@ async function create(request, env) {
 
   const id = randomId();
   const created = Date.now();
-  const expiration = Math.floor(created / 1000) + DAYS * 86400;
+  const keep = KEEP.includes(Number(info.keepDays)) ? Number(info.keepDays) : KEEP[0];
+  const expiration = Math.floor(created / 1000) + Math.max(DAYS, keep) * 86400;
   const meta = {
-    v: 1,
+    v: 2,
     n,
     ordered: !!info.ordered,
     tokens: info.tokens,
@@ -92,13 +112,16 @@ async function create(request, env) {
     readToken: info.readToken,
     sender,
     created,
-    expires: expiration * 1000,
+    expires: created + DAYS * 86400000,
+    keep,
+    retainUntil: expiration * 1000,
     status: 'out',
   };
   await env.ESIGN.put(`d:${id}`, await doc.arrayBuffer(), { expiration });
   await env.ESIGN.put(`e:${id}`, await envelope.arrayBuffer(), { expiration });
   await env.ESIGN.put(`m:${id}`, JSON.stringify(meta), { expiration });
-  return json({ id, expires: meta.expires });
+  await logEvent(env, id, meta, request, 'created', 'sender', { docSha256: /^[0-9a-f]{64}$/.test(info.docSha256 || '') ? info.docSha256 : undefined });
+  return json({ id, expires: meta.expires, retainUntil: meta.retainUntil });
 }
 
 async function state(env, id, meta, who, withEnvelope) {
@@ -115,6 +138,7 @@ async function state(env, id, meta, who, withEnvelope) {
     });
   }
   const done = signers.every((s) => s.signed);
+  const expired = meta.status === 'out' && !done && Date.now() > meta.expires;
   const out = {
     id,
     role: who.role,
@@ -124,9 +148,13 @@ async function state(env, id, meta, who, withEnvelope) {
     sender: meta.sender,
     created: meta.created,
     expires: meta.expires,
-    status: meta.status === 'out' && done ? 'complete' : meta.status,
+    status: meta.status === 'out' && done ? 'complete' : expired ? 'expired' : meta.status,
     declined: meta.declined || null,
     signers,
+    keep: meta.keep || DAYS,
+    retainUntil: retainUntil(meta),
+    sealed: meta.fp ? { fingerprint: meta.fp, at: meta.sealedAt, timestamp: meta.timestamp || null, cert: meta.sealCert || null } : null,
+    events: (await env.ESIGN.get(`a:${id}`, 'json')) || [],
   };
   if (withEnvelope) out.envelope = b64(await env.ESIGN.get(`e:${id}`, 'arrayBuffer'));
   return out;
@@ -146,7 +174,8 @@ async function view(request, env, id, meta, who) {
   const key = `v:${id}:${who.index}`;
   const seen = await env.ESIGN.getWithMetadata(key, 'text');
   if (seen.value === null) {
-    await env.ESIGN.put(key, '1', { expiration: Math.floor(meta.expires / 1000), metadata: stamp(request) });
+    await env.ESIGN.put(key, '1', { expiration: exp(meta), metadata: stamp(request) });
+    await logEvent(env, id, meta, request, 'viewed', who.index);
   }
   return new Response(null, { status: 204 });
 }
@@ -154,6 +183,7 @@ async function view(request, env, id, meta, who) {
 async function sign(request, env, id, meta, who) {
   if (who.role !== 'signer') return json({ error: 'not_a_signer' }, 403);
   if (meta.status !== 'out') return json({ error: meta.status }, 409);
+  if (Date.now() > meta.expires) return json({ error: 'expired' }, 409);
   const key = `s:${id}:${who.index}`;
   if ((await env.ESIGN.get(key, 'stream')) !== null) return json({ error: 'already_signed' }, 409);
   if (meta.ordered) {
@@ -165,13 +195,20 @@ async function sign(request, env, id, meta, who) {
   }
   const body = await request.arrayBuffer();
   if (!body.byteLength || body.byteLength > MAX_SMALL) return json({ error: 'bad_body' }, 400);
-  await env.ESIGN.put(key, body, { expiration: Math.floor(meta.expires / 1000), metadata: stamp(request) });
+  await env.ESIGN.put(key, body, { expiration: exp(meta), metadata: stamp(request) });
   // Count it as viewed too, in case the view call never arrived.
   const vkey = `v:${id}:${who.index}`;
   if ((await env.ESIGN.get(vkey, 'text')) === null) {
-    await env.ESIGN.put(vkey, '1', { expiration: Math.floor(meta.expires / 1000), metadata: stamp(request) });
+    await env.ESIGN.put(vkey, '1', { expiration: exp(meta), metadata: stamp(request) });
+    await logEvent(env, id, meta, request, 'viewed', who.index);
   }
-  return json(await state(env, id, meta, who, false));
+  await logEvent(env, id, meta, request, 'signed', who.index, { consent: true });
+  const out = await state(env, id, meta, who, false);
+  if (out.status === 'complete') {
+    await logEvent(env, id, meta, request, 'completed', 'paperhaus');
+    out.events = (await env.ESIGN.get(`a:${id}`, 'json')) || out.events;
+  }
+  return json(out);
 }
 
 async function decline(request, env, id, meta, who) {
@@ -180,16 +217,105 @@ async function decline(request, env, id, meta, who) {
   const body = await request.arrayBuffer();
   meta.status = 'declined';
   meta.declined = { index: who.index, ...stamp(request), reason: body.byteLength && body.byteLength < 20000 ? b64(body) : null };
-  await env.ESIGN.put(`m:${id}`, JSON.stringify(meta), { expiration: Math.floor(meta.expires / 1000) });
+  await env.ESIGN.put(`m:${id}`, JSON.stringify(meta), { expiration: exp(meta) });
+  await logEvent(env, id, meta, request, 'declined', who.index);
   return json(await state(env, id, meta, who, false));
 }
 
 async function cancel(env, id, meta, who) {
   if (who.role !== 'sender') return json({ error: 'not_the_sender' }, 403);
-  const keys = [`m:${id}`, `d:${id}`, `e:${id}`];
+  const keys = [`m:${id}`, `d:${id}`, `e:${id}`, `a:${id}`, `f:${id}`];
   for (let i = 0; i < meta.n; i++) keys.push(`s:${id}:${i}`, `v:${id}:${i}`);
   await Promise.all(keys.map((k) => env.ESIGN.delete(k)));
   return json({ ok: true });
+}
+
+async function seal(request, env, id, meta) {
+  const done = await allSigned(env, id, meta);
+  if (meta.status !== 'out' || !done) return json({ error: 'not_complete' }, 409);
+  if (meta.fp) return json({ error: 'sealed' }, 409);
+  if ((meta.seals || 0) >= MAX_SEALS) return json({ error: 'too_many_seals' }, 429);
+  let digest;
+  try {
+    const body = await request.json();
+    if (!/^[0-9a-f]{64}$/.test(body.digest || '')) throw new Error('bad');
+    digest = new Uint8Array(body.digest.match(/../g).map((h) => parseInt(h, 16)));
+  } catch {
+    return json({ error: 'bad_digest' }, 400);
+  }
+  meta.seals = (meta.seals || 0) + 1;
+  await env.ESIGN.put(`m:${id}`, JSON.stringify(meta), { expiration: exp(meta) });
+  const out = await sealDigest(digest, env);
+  return json({ cms: b64u8(out.cms), signedAt: out.signedAt, timestamp: out.timestamp, cert: out.cert });
+}
+
+async function storeFinal(request, env, id, meta, who) {
+  if (!(await allSigned(env, id, meta)) || meta.status !== 'out') return json({ error: 'not_complete' }, 409);
+  if (meta.fp) return json({ error: 'sealed', fingerprint: meta.fp }, 409);
+  const fp = (request.headers.get('x-fingerprint') || '').toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(fp)) return json({ error: 'bad_fingerprint' }, 400);
+  let info = {};
+  try {
+    info = JSON.parse(request.headers.get('x-seal') || '{}');
+  } catch {
+    info = {};
+  }
+  const body = await request.arrayBuffer();
+  if (!body.byteLength || body.byteLength > MAX_FINAL) return json({ error: 'bad_body', limit: MAX_FINAL }, 400);
+  await env.ESIGN.put(`f:${id}`, body, { expiration: exp(meta) });
+  meta.fp = fp;
+  meta.sealedAt = Date.now();
+  meta.sealCert = /^[0-9a-f]{64}$/.test(info.cert || '') ? info.cert : null;
+  meta.timestamp = info.timestamp && typeof info.timestamp.by === 'string'
+    ? { by: info.timestamp.by.slice(0, 40), at: Number(info.timestamp.at) || null }
+    : null;
+  await env.ESIGN.put(`m:${id}`, JSON.stringify(meta), { expiration: exp(meta) });
+  await logEvent(env, id, meta, request, 'sealed', who.role === 'signer' ? who.index : who.role, {
+    fingerprint: fp,
+    timestamp: meta.timestamp ? meta.timestamp.by : 'none',
+  });
+  return json(await state(env, id, meta, who, false));
+}
+
+async function allSigned(env, id, meta) {
+  for (let i = 0; i < meta.n; i++) {
+    const s = await env.ESIGN.get(`s:${id}:${i}`, 'stream');
+    if (s === null) return false;
+    s.cancel();
+  }
+  return true;
+}
+
+/**
+ * Append to the audit trail. Each entry holds the hash of the previous one (prev) and its
+ * own hash (h) over everything else in it, so the chain can be checked by anyone holding
+ * it. Names stay out: signers are numbered, their names live in the encrypted envelope.
+ */
+async function logEvent(env, id, meta, request, ev, by, extra = {}) {
+  const list = (await env.ESIGN.get(`a:${id}`, 'json')) || [];
+  const cf = request.cf || {};
+  const entry = {
+    n: list.length + 1,
+    t: Date.now(),
+    ev,
+    by,
+    ip: request.headers.get('cf-connecting-ip') || '',
+    ua: (request.headers.get('user-agent') || '').slice(0, 300),
+    geo: [cf.city, cf.regionCode || cf.region, cf.country].filter(Boolean).join(', '),
+    ...Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== undefined)),
+    prev: list.length ? list[list.length - 1].h : '0'.repeat(64),
+  };
+  entry.h = await sha256hex(JSON.stringify(entry));
+  list.push(entry);
+  await env.ESIGN.put(`a:${id}`, JSON.stringify(list), { expiration: exp(meta) });
+}
+
+/** When Cloudflare deletes the stored request (seconds, for KV). */
+function exp(meta) {
+  return Math.floor(retainUntil(meta) / 1000);
+}
+function retainUntil(meta) {
+  return meta.retainUntil || meta.expires;
 }
 
 // ---------------------------------------------------------------- helpers

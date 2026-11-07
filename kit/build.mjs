@@ -307,12 +307,19 @@ const SCAN_TOOL = {
 `,
 };
 
-// Request Signatures: send a PDF to several people, each signs from a private link.
-// The signing page (sign-request) is public, so it is a page of its own without the
-// app's navigation; the API it talks to is functions/api/esign/.
-const SIGN_PDF_ANCHOR = "        subtitle: 'Draw, type, or upload your signature.',\n      },\n";
+// Sign: one tool for signing yourself, signing with others and sending to others. It takes
+// Sign PDF's place in the tool list (the page is request-signatures, from when it only sent
+// requests). The signing page (sign-request) is public, so it is a page of its own without
+// the app's navigation; the API it talks to is functions/api/esign/.
+const SIGN_PDF_ENTRY = `      {
+        href: import.meta.env.BASE_URL + 'sign-pdf.html',
+        name: 'Sign PDF',
+        icon: 'ph-pen-nib',
+        subtitle: 'Draw, type, or upload your signature.',
+      },
+`;
 const ESIGN_TOOL = {
-  name: 'Request Signatures',
+  name: 'Sign',
   dir: join(KIT, 'tools', 'esign'),
   pages: ['request-signatures', 'sign-request'],
   files: [
@@ -321,17 +328,32 @@ const ESIGN_TOOL = {
     ['request-page.ts', 'src/js/logic/kit-esign/request-page.ts'],
     ['sign-page.ts', 'src/js/logic/kit-esign/sign-page.ts'],
     ['esign-common.ts', 'src/js/logic/kit-esign/esign-common.ts'],
+    ['esign-seal.ts', 'src/js/logic/kit-esign/esign-seal.ts'],
     ['esign.css', 'src/js/logic/kit-esign/esign.css'],
   ],
-  // Listed right after Sign PDF, wherever BentoPDF lists it.
-  afterSignPdf: `      {
+  // Wherever BentoPDF lists Sign PDF.
+  replacesSignPdf: `      {
         href: import.meta.env.BASE_URL + 'request-signatures.html',
-        name: 'Request Signatures',
-        icon: 'ph-users-three',
-        subtitle: 'Send a PDF to others to sign, each from their own private link.',
+        name: 'Sign',
+        icon: 'ph-signature',
+        subtitle: 'Sign yourself, sign with others, or send it out. Sealed and recorded.',
       },
 `,
 };
+
+// Pages: BentoPDF's multi tool already merges, reorders, rotates, deletes, extracts and
+// splits in one view; it is listed under that plainer name.
+const MULTI_TOOL_ENTRY = `        href: import.meta.env.BASE_URL + 'pdf-multi-tool.html',
+        name: 'PDF Multi Tool',
+        icon: 'ph-pencil-ruler',
+        subtitle:
+          'Merge, Split, Organize, Delete, Rotate, Add Blank Pages, Extract and Duplicate in a unified interface.',
+`;
+const PAGES_ENTRY = `        href: import.meta.env.BASE_URL + 'pdf-multi-tool.html',
+        name: 'Pages',
+        icon: 'ph-squares-four',
+        subtitle: 'Merge, reorder, rotate, delete, extract and split in one view.',
+`;
 
 // Tools added to match iLovePDF's list (written for Paperhaus from its own spec, see
 // kit/PROVENANCE.md): PDF to PowerPoint, HTML to PDF, Redact PDF, Summarize PDF and
@@ -408,7 +430,8 @@ function installKitTools() {
     [VITE_ANCHOR, vite, 'vite.config.ts'],
     [POPULAR_ANCHOR, tools, 'src/js/config/tools.ts'],
     [CATEGORY_ANCHOR, tools, 'src/js/config/tools.ts'],
-    [SIGN_PDF_ANCHOR, tools, 'src/js/config/tools.ts (Sign PDF entry)'],
+    [SIGN_PDF_ENTRY, tools, 'src/js/config/tools.ts (Sign PDF entry)'],
+    [MULTI_TOOL_ENTRY, tools, 'src/js/config/tools.ts (PDF Multi Tool entry)'],
     ...MORE_TOOL.inserts.map(([cat]) => [categoryAnchor(cat), tools, `src/js/config/tools.ts (${cat} category)`]),
   ]) {
     if (!src.includes(anchor)) fail(`BentoPDF changed ${what}, so the kit cannot add its tools. Update the anchors in kit/build.mjs (installKitTools).`);
@@ -435,7 +458,8 @@ function installKitTools() {
   let next = tools
     .replace(POPULAR_ANCHOR, `${POPULAR_ANCHOR}      // [phase0-kit]\n${SCAN_TOOL.popular}`)
     .replace(CATEGORY_ANCHOR, `  // [phase0-kit]\n${SCAN_TOOL.category}${MORE_TOOL.category}${CATEGORY_ANCHOR}`)
-    .replaceAll(SIGN_PDF_ANCHOR, `${SIGN_PDF_ANCHOR}      // [phase0-kit]\n${ESIGN_TOOL.afterSignPdf}`);
+    .replaceAll(SIGN_PDF_ENTRY, `      // [phase0-kit]\n${ESIGN_TOOL.replacesSignPdf}`)
+    .replaceAll(MULTI_TOOL_ENTRY, PAGES_ENTRY);
   for (const [cat, item] of MORE_TOOL.inserts) {
     const a = categoryAnchor(cat);
     // In Popular Tools, Scan stays first.
@@ -586,6 +610,63 @@ const escapeHtml = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace
 // *word* in kit.env copy becomes the italic accent word.
 const withEm = (t) => escapeHtml(t).replace(/\*([^*]+)\*/g, '<em>$1</em>');
 
+// The home page: start from the file (drop zone and suggestions), eight tasks, recent
+// files and pinned tools, written into BentoPDF's header block. kit/tools/pin/home.js
+// makes it work; the full tool list stays below it under "All tools".
+const HOME_TASKS = [
+  ['request-signatures.html', 'ph-signature', 'Sign', 'Sign yourself, or send to others to sign. Sealed and recorded.'],
+  ['#edit', 'ph-pencil-simple-line', 'Edit', 'Text, images, notes, highlights and form fields.'],
+  ['pdf-multi-tool.html', 'ph-squares-four', 'Pages', 'Merge, reorder, rotate, delete, extract and split.'],
+  ['#convert', 'ph-arrows-left-right', 'Convert', 'To and from PDF. Word, Excel, PowerPoint, images, web pages.'],
+  ['compress-pdf.html', 'ph-arrows-in', 'Compress', 'Make files smaller for email, with a quality you choose.'],
+  ['#secure', 'ph-shield-check', 'Secure and redact', 'Passwords, permissions, black out details, remove hidden data.'],
+  ['scan-document.html', 'ph-scan', 'Scan', 'Use your phone camera. Pages are cropped and straightened.'],
+  ['#ai', 'ph-sparkle', 'AI on this device', 'Summarize, translate, find text in scans. Nothing is uploaded.'],
+];
+
+function homeMarkup(env) {
+  const eyebrow = escapeHtml((env.BRAND_NAME || 'paperhaus').toLowerCase());
+  const title = withEm(env.HOME_TITLE || 'What are we *working on?*');
+  const note = escapeHtml(env.HOME_NOTE || 'Nothing is uploaded or stored');
+  const tasks = HOME_TASKS.map(([href, icon, name, sub], i) =>
+    `<a class="ph-task" href="${href}" style="--c:var(--c${(i % 6) + 1});--i:var(--i${(i % 6) + 1})">` +
+    `<span class="ph-task-icon"><i class="ph ${icon}" aria-hidden="true"></i></span>` +
+    `<span class="ph-task-name">${escapeHtml(name)}</span><span class="ph-task-sub">${escapeHtml(sub)}</span></a>`).join('');
+  return '<!--ph-header-->' +
+    // BentoPDF's script rewrites the header's first h2 and first p (simple mode); these
+    // hidden two take that, so the real headings keep their words.
+    '<h2 hidden></h2><p hidden></p>' +
+    `<section id="ph-home" class="ph-home">` +
+    `<div class="ph-eyebrow">${eyebrow}</div><h1 class="ph-title">${title}</h1>` +
+    `<div id="ph-drop" class="ph-drop">` +
+    `<i class="ph ph-upload-simple ph-drop-icon" aria-hidden="true"></i>` +
+    `<div class="ph-drop-title">Drop any file here</div>` +
+    `<div class="ph-drop-sub">PDF, Word, Excel, PowerPoint or photos. Paperhaus suggests what to do with it.</div>` +
+    `<div class="ph-drop-actions"><button type="button" id="ph-choose" class="ph-btn ph-btn-main"><i class="ph ph-folder-open" aria-hidden="true"></i> Choose a file</button>` +
+    `<a href="scan-document.html" class="ph-btn"><i class="ph ph-scan" aria-hidden="true"></i> Scan with camera</a></div>` +
+    `<form id="ph-url" class="ph-url"><i class="ph ph-globe-simple" aria-hidden="true"></i><input type="url" inputmode="url" placeholder="Paste a web page link" aria-label="Web page link to make a PDF"><button type="submit" class="ph-btn">Make PDF</button></form>` +
+    `<input type="file" id="ph-file" multiple hidden>` +
+    (note ? `<div class="ph-note">${note}</div>` : '') +
+    `</div>` +
+    `<div id="ph-suggest" class="ph-suggest" hidden></div>` +
+    `<div class="ph-sec-head"><h2>Or pick a task</h2><a id="ph-all-link" href="#all-tools">See all tools</a></div>` +
+    `<div class="ph-tasks">${tasks}</div>` +
+    `<div class="ph-lists">` +
+    `<div class="ph-card" id="ph-recent"><div class="ph-card-head"><h2>Recent on this device</h2><span>Only you see these</span></div><div id="ph-recent-list"></div></div>` +
+    `<div class="ph-card" id="ph-pins"><div class="ph-card-head"><h2>Pinned tools</h2><span>Star a tool to pin it</span></div><div id="ph-pins-list" class="ph-pins-list"></div>` +
+    `<p class="ph-card-foot">Everything you open, convert or sign is processed in this browser. Signing requests are encrypted before they leave it.</p></div>` +
+    `</div></section>` +
+    `<div id="ph-hubbar" class="ph-hubbar" hidden><button type="button" id="ph-hub-back" class="ph-linkbtn"><i class="ph ph-arrow-left" aria-hidden="true"></i> Home</button><h2></h2><p></p></div>` +
+    `<h2 id="all-tools" class="ph-all-title">All tools</h2>` +
+    `<nav class="ph-tabbar" aria-label="Quick actions">` +
+    `<a href="/" aria-current="page"><i class="ph ph-house" aria-hidden="true"></i>Home</a>` +
+    `<a href="scan-document.html"><i class="ph ph-scan" aria-hidden="true"></i>Scan</a>` +
+    `<a href="request-signatures.html"><i class="ph ph-signature" aria-hidden="true"></i>Sign</a>` +
+    `<a href="#all-tools"><i class="ph ph-squares-four" aria-hidden="true"></i>Tools</a>` +
+    `<a href="#ph-recent"><i class="ph ph-clock-counter-clockwise" aria-hidden="true"></i>Recent</a></nav>` +
+    '<!--/ph-header-->';
+}
+
 function rewriteHomeHeader(env) {
   const file = join(DIST, 'index.html');
   if (!existsSync(file)) return;
@@ -598,15 +679,7 @@ function rewriteHomeHeader(env) {
     log('WARNING: could not find the home page header; leaving BentoPDF\'s heading in place.');
     return;
   }
-  const eyebrow = escapeHtml((env.BRAND_NAME || 'paperhaus').toLowerCase());
-  const title = withEm(env.HOME_TITLE || 'your files stay *yours.*');
-  const lede = withEm(env.HOME_SUBTITLE || 'Merge, split, sign, convert and more. Every tool runs right in your browser.');
-  const note = escapeHtml(env.HOME_NOTE || 'Nothing is uploaded or stored');
-  // Divs, not paragraphs: BentoPDF's script rewrites the first <p> in this header.
-  const inner = '<!--ph-header-->' +
-    `<div class="ph-eyebrow">${eyebrow}</div><h1 class="ph-title">${title}</h1>` +
-    `<div class="ph-lede">${lede}</div>` + (note ? `<div class="ph-note">${note}</div>` : '') +
-    '<!--/ph-header-->';
+  const inner = homeMarkup(env);
   // Function replacements, so a $ in the copy is never read as a pattern.
   const out = marked.test(html) ? html.replace(marked, () => inner) : html.replace(original, (m, open, body, close) => open + inner + close);
   writeFileSync(file, out);
@@ -676,7 +749,7 @@ function addPinning(env) {
   const out = join(DIST, 'kit-tools', 'pin');
   mkdirSync(out, { recursive: true });
   let hash = 0;
-  for (const f of ['pin.js', 'pin.css']) {
+  for (const f of ['pin.js', 'pin.css', 'flow.js', 'flow.css', 'home.js', 'home.css']) {
     const text = readFileSync(join(KIT, 'tools', 'pin', f), 'utf8');
     for (let i = 0; i < text.length; i++) hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
     writeFileSync(join(out, f), text);
@@ -697,7 +770,13 @@ function addPinning(env) {
     (siteUrl ? `<meta name="paperhaus-site" content="${escapeHtml(siteUrl)}" ${PIN_MARK}>` : '') +
     (sourceUrl ? `<meta name="paperhaus-source" content="${escapeHtml(sourceUrl)}" ${PIN_MARK}>` : '') +
     `<link rel="stylesheet" href="/kit-tools/pin/pin.css?v=${v}" ${PIN_MARK}>` +
+    `<link rel="stylesheet" href="/kit-tools/pin/flow.css?v=${v}" ${PIN_MARK}>` +
+    // flow.js first: it has to see the blob links tools make for their downloads.
+    `<script src="/kit-tools/pin/flow.js?v=${v}" defer ${PIN_MARK}></script>` +
     `<script src="/kit-tools/pin/pin.js?v=${v}" defer ${PIN_MARK}></script>`;
+  const homeTags =
+    `<link rel="stylesheet" href="/kit-tools/pin/home.css?v=${v}" ${PIN_MARK}>` +
+    `<script src="/kit-tools/pin/home.js?v=${v}" defer ${PIN_MARK}></script>`;
   // BentoPDF's own versions of these tags, and ours from an earlier run, are replaced.
   const strip = [
     new RegExp(`<script[^>]*${PIN_MARK}[^>]*></script>`, 'g'),
@@ -717,7 +796,8 @@ function addPinning(env) {
         // Public pages (the signing page) have no account, so no account chip or pinning.
         if (html.includes('name="paperhaus-public"')) continue;
         for (const re of strip) html = html.replace(re, '');
-        writeFileSync(p, html.replace('</head>', `${tags}</head>`));
+        const isHome = p === join(DIST, 'index.html');
+        writeFileSync(p, html.replace('</head>', `${tags}${isHome ? homeTags : ''}</head>`));
         pages++;
       }
     }
@@ -775,7 +855,7 @@ function brandWebApp(env, bg) {
       ['Scan to PDF', 'Scan', '/scan-document'],
       ['Merge PDF', 'Merge', '/merge-pdf'],
       ['Compress PDF', 'Compress', '/compress-pdf'],
-      ['Sign PDF', 'Sign', '/sign-pdf'],
+      ['Sign', 'Sign', '/request-signatures'],
     ].map(([name, short_name, url]) => ({
       name,
       short_name,

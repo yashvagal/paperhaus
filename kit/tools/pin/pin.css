@@ -97,9 +97,15 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  width: 100%;
   padding: 0.6rem 0.75rem;
   border-radius: 12px;
+  font: inherit;
   font-weight: 600;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
   color: var(--text, #f3f4f6);
 }
 .ph-menu-item:hover {
