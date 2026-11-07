@@ -132,7 +132,7 @@ The camera needs HTTPS, which Cloudflare Pages always provides. The security hea
 | Tasks | Eight tiles: Sign, Edit, Pages, Convert, Compress, Secure and redact, Scan, AI on this device. Edit, Convert, Secure and AI open as hubs: the full tool list filtered to that task (`/#edit`, `/#convert`, `/#secure`, `/#ai`). |
 | Recent and pinned | The last files you made, on this device only, with **Open** to keep working on them. Pinned tools are the tools you star in the list. |
 | Keep working | When any tool saves a file, a small panel offers the next steps (Compress, Add a password, Sign, Pages, Redact, Convert to Word). The next tool opens with the file already loaded. |
-| Phone | Under 640 px wide the home page gets a bottom bar: Home, Scan, Sign, Tools, Recent. |
+| Phone | Under 640 px wide every app page gets a bottom bar: Home, Scan, Sign, Tools, Recent. It steps aside while you type, and sits under dialogs. The public signing page has none, since signers have no Paperhaus account. |
 
 Recent files are kept in the browser's own storage (IndexedDB), up to 12 files or 200 MB, and never uploaded. **Clear recent files** in the account menu empties the list. The pieces: `kit/tools/pin/flow.js` (on every page) and `kit/tools/pin/home.js` (home only), with the home markup written by `kit/build.mjs`.
 

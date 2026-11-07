@@ -354,8 +354,47 @@
     });
   }
 
+  // ---------------------------------------------------------------- phone tab bar (every page)
+
+  var TABS = [
+    ['/', 'ph-house', 'Home', /^\/(index(\.html)?)?$/],
+    ['/scan-document.html', 'ph-scan', 'Scan', /^\/scan-document/],
+    ['/request-signatures.html', 'ph-signature', 'Sign', /^\/(request-signatures|sign-pdf)/],
+    ['/#all-tools', 'ph-squares-four', 'Tools', null],
+    ['/#ph-recent', 'ph-clock-counter-clockwise', 'Recent', null],
+  ];
+
+  function tabbar() {
+    if (document.querySelector('.ph-tabbar')) return;
+    var nav = el('nav', 'ph-tabbar');
+    nav.setAttribute('aria-label', 'Quick actions');
+    TABS.forEach(function (t) {
+      var a = el('a');
+      a.href = t[0];
+      a.innerHTML = '<i class="ph ' + t[1] + '" aria-hidden="true"></i>';
+      a.appendChild(document.createTextNode(t[2]));
+      if (t[3] && t[3].test(location.pathname)) a.setAttribute('aria-current', 'page');
+      nav.appendChild(a);
+    });
+    document.body.appendChild(nav);
+    document.body.classList.add('ph-has-tabbar');
+    // Out of the way while typing, so it does not ride on top of the phone keyboard.
+    document.addEventListener('focusin', function (e) {
+      if (e.target && e.target.matches && e.target.matches('input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]), textarea, select, [contenteditable="true"]')) {
+        document.body.classList.add('ph-typing');
+      }
+    });
+    document.addEventListener('focusout', function () {
+      document.body.classList.remove('ph-typing');
+    });
+  }
+
   window.paperhausFlow = { list: list, get: get, put: put, clear: clear, kindOf: kindOf, toolHref: toolHref, showDone: showDone };
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', receive);
-  else receive();
+  function start() {
+    tabbar();
+    receive();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
 })();

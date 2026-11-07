@@ -11,10 +11,6 @@
   var home = document.getElementById('ph-home');
   if (!home) return;
   var flow = window.paperhausFlow;
-  // The phone tab bar is fixed to the screen; inside the header card it would be fixed to
-  // the card instead, so it moves to the page itself.
-  var tabbar = document.querySelector('.ph-tabbar');
-  if (tabbar) document.body.appendChild(tabbar);
 
   // Hubs: which of the tool list's categories each one shows.
   var HUBS = {

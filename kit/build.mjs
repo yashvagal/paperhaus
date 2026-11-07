@@ -658,12 +658,6 @@ function homeMarkup(env) {
     `</div></section>` +
     `<div id="ph-hubbar" class="ph-hubbar" hidden><button type="button" id="ph-hub-back" class="ph-linkbtn"><i class="ph ph-arrow-left" aria-hidden="true"></i> Home</button><h2></h2><p></p></div>` +
     `<h2 id="all-tools" class="ph-all-title">All tools</h2>` +
-    `<nav class="ph-tabbar" aria-label="Quick actions">` +
-    `<a href="/" aria-current="page"><i class="ph ph-house" aria-hidden="true"></i>Home</a>` +
-    `<a href="scan-document.html"><i class="ph ph-scan" aria-hidden="true"></i>Scan</a>` +
-    `<a href="request-signatures.html"><i class="ph ph-signature" aria-hidden="true"></i>Sign</a>` +
-    `<a href="#all-tools"><i class="ph ph-squares-four" aria-hidden="true"></i>Tools</a>` +
-    `<a href="#ph-recent"><i class="ph ph-clock-counter-clockwise" aria-hidden="true"></i>Recent</a></nav>` +
     '<!--/ph-header-->';
 }
 
