@@ -1,8 +1,7 @@
 # Paperhaus security and records policies (drafts)
 
 Short, working policies for running Paperhaus as a business tool. They describe what the
-code and setup do, so each line can be checked; the few settings still to switch on are
-marked (to do). They are modeled on the controls
+code and setup do, so each line can be checked. They are modeled on the controls
 that 21 CFR Part 11, HIPAA and SOC 2 ask about, but Paperhaus holds none of those
 certifications, and it is not set up for HIPAA-covered data (see "Not covered" below).
 
@@ -57,9 +56,12 @@ Owner: Yash Vagal. Review: every 6 months, and after any incident or major chang
 ## 5. Changes
 
 - All changes are in Git (github.com/yashvagal/paperhaus). The main branch is protected
-  from force pushes and deletion (to do: GitHub, Settings, Rules).
-- Dependabot opens updates for dependencies and CodeQL scans the code on every push to
-  main and weekly (to do: turn on Actions and Dependabot alerts for the repository).
+  from force pushes and deletion (ruleset "Protect main").
+- CodeQL scans the code and Trivy scans the dependencies on every push to main and
+  weekly. Dependabot alerts on vulnerable dependencies and opens grouped fixes. Secret
+  scanning with push protection blocks commits that contain keys or passwords.
+- Once a month a scheduled check compares Paperhaus with BentoPDF. Updates worth taking
+  are merged on a separate branch, built and tested, and go live only after review.
 - Every change deploys through Cloudflare Pages from main; a failed build never replaces
   the live site.
 - Before a change to signing, sealing or storage goes live, it is tested end to end
