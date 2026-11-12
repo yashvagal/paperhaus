@@ -438,3 +438,24 @@
     display: none;
   }
 }
+
+/* ------------------------------------------------------------ tool stars (pin a tool) */
+/* BentoPDF shows the star only on hover, so phones never see it. Always show it,
+   empty until starred, so pinning a tool is one tap. */
+#tool-grid .tool-fav-btn {
+  opacity: 1;
+  width: 2.25rem;
+  height: 2.25rem;
+  color: var(--muted, #9ca3af);
+}
+#tool-grid .tool-fav-btn svg {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+#tool-grid .tool-fav-btn:hover {
+  color: var(--accent, #818cf8);
+  background: var(--accent-soft, rgba(99, 102, 241, 0.16));
+}
+#tool-grid .tool-fav-btn.is-favorite {
+  color: #e0a92e;
+}

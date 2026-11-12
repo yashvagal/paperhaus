@@ -71,11 +71,9 @@
   // ---------------------------------------------------------------- pinning
 
   function canPinHere() {
-    // Already running as the pinned app: nothing to do.
-    if (standalone()) return false;
-    // Pinned earlier on this computer and the browser is not offering it again.
-    if (store.get('ph-pinned') === '1' && !deferredPrompt) return false;
-    return true;
+    // Already running as the pinned app: nothing to do. Otherwise always offer it: a
+    // pin removed later (or made in another browser) leaves no trace the page can see.
+    return !standalone();
   }
 
   function updatePin() {
@@ -237,12 +235,15 @@
           '<i class="ph ph-info" aria-hidden="true"></i> About Paperhaus');
         menu.appendChild(about);
       }
-      // The source offer the AGPL asks for (Paperhaus is built on BentoPDF, AGPL-3.0).
-      var src = document.querySelector('meta[name="paperhaus-source"]');
-      var srcUrl = src && src.getAttribute('content');
-      if (srcUrl && /^https?:\/\//i.test(srcUrl)) {
-        menu.appendChild(el('a', { href: srcUrl, target: '_blank', rel: 'noopener', role: 'menuitem', class: 'ph-menu-item', title: 'Built on BentoPDF (AGPL-3.0)' },
-          '<i class="ph ph-code" aria-hidden="true"></i> Source code'));
+      // Pin to the phone's home screen, or as an app on a computer.
+      if (canPinHere()) {
+        var pinItem = el('button', { type: 'button', role: 'menuitem', class: 'ph-menu-item' },
+          '<i class="ph ph-push-pin" aria-hidden="true"></i> ' + (isIOS || isAndroid ? 'Add to home screen' : 'Pin as an app'));
+        pinItem.addEventListener('click', function () {
+          closeMenu();
+          onPin();
+        });
+        menu.appendChild(pinItem);
       }
       // Recent files live only in this browser (flow.js); this empties that list.
       if (window.paperhausFlow) {

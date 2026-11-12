@@ -914,7 +914,7 @@ const logoExisted = existsSync(logoDest);
 
 // The footer line is FOOTER_TEXT from kit.env, or nothing. (Left empty, BentoPDF would put
 // its own copyright line there, so a no-break space stands in.) The AGPL source offer
-// lives in the account menu instead: "Source code", linking to SOURCE_URL.
+// is the paperhaus-source meta tag on every page, pointing to SOURCE_URL.
 const footer = (env.FOOTER_TEXT || '').trim() || '\u00a0';
 
 const buildEnv = {

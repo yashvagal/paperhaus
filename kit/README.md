@@ -130,7 +130,7 @@ The camera needs HTTPS, which Cloudflare Pages always provides. The security hea
 | --- | --- |
 | Drop zone | Drop or choose any file (or paste one, or paste a web page link). Paperhaus suggests what to do: for a PDF, Sign it, Get it signed by others, Fill in the form (only when it has form fields), Compress, Merge or reorder pages, Convert to Word, Redact, Add a password, Edit, Summarize. Office files, images and other formats get their "to PDF" tool. Several PDFs get Merge. |
 | Tasks | Eight tiles: Sign, Edit, Pages, Convert, Compress, Secure and redact, Scan, AI on this device. Edit, Convert, Secure and AI open as hubs: the full tool list filtered to that task (`/#edit`, `/#convert`, `/#secure`, `/#ai`). |
-| Recent and pinned | The last files you made, on this device only, with **Open** to keep working on them. Pinned tools are the tools you star in the list. |
+| Recent and pinned | The last files you made, on this device only, with **Open** to keep working on them. Pinned tools are the tools you star in the list; every tool shows an empty star, so pinning is one tap, on phones too. |
 | Keep working | When any tool saves a file, a small panel offers the next steps (Compress, Add a password, Sign, Pages, Redact, Convert to Word). The next tool opens with the file already loaded. |
 | Phone | Under 640 px wide every app page gets a bottom bar: Home, Scan, Sign, Tools, Recent. It steps aside while you type, and sits under dialogs. The public signing page has none, since signers have no Paperhaus account. |
 
@@ -205,10 +205,11 @@ Paperhaus is not an App Store or Play Store app. It's your website, pinned so it
 - **Pin app** sits at the top right of every page.
   - On Chrome, Edge and Android it pins in one tap.
   - On iPhone, iPad and Mac Safari it shows the two steps: **Share → Add to Home Screen** on iPhone and iPad, and **File → Add to Dock** on a Mac.
-  - It disappears once you're using the pinned app.
+  - The same option is in your account menu (tap your initial): **Add to home screen** on phones, **Pin as an app** on computers.
+  - Both disappear once you're using the pinned app.
 - **Signing in:** the first time, enter your email and the code Cloudflare sends. After that the pinned app opens straight in for a month (steps 6 and 7 above).
   - On iPhone, a home screen app keeps its own sign-in, separate from Safari, so sign in once inside it.
-- **Your name:** once signed in, your initial and name show at the top right. Its menu has **About Paperhaus** (when `SITE_URL` is set) and **Sign out**.
+- **Your name:** once signed in, your initial and name show at the top right. Its menu has **About Paperhaus** (when `SITE_URL` is set), **Add to home screen**, **Clear recent files** and **Sign out**.
 - **Shortcuts:** press and hold the icon on a phone, or right-click it on a computer, for Scan, Merge, Compress and Sign.
 
 Your files still stay on each device. A scan started on your phone is on your phone; Phase 1 adds sending files between your own devices and to friends.
@@ -223,7 +224,7 @@ Everything lives in `kit/kit.env`. Edit, commit, push, and Cloudflare rebuilds.
 | --- | --- |
 | `BRAND_NAME` | Name in the header, tab titles and footer |
 | `BRAND_LOGO` | Leave empty for the Paperhaus brand mark (`kit/brand/`), or point at your own SVG or PNG in the repo |
-| `SOURCE_URL` | Your public source code, linked as "Source code" in the account menu (the AGPL asks for this offer) |
+| `SOURCE_URL` | Your public source code, written into every page as a `paperhaus-source` meta tag (the AGPL asks for a source offer) |
 | `FOOTER_TEXT` | Optional line at the bottom of every page. Empty by default |
 | `SITE_URL` | Your public Paperhaus website (the front page in `website/`). Adds **About Paperhaus** to the account menu. Leave empty for no link |
 | `OCR_LANGUAGES` | OCR languages served from your site, such as `eng,spa,hin`. Each adds a few MB |
