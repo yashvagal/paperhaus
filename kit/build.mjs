@@ -733,7 +733,11 @@ function applyTheme(env) {
   visit(DIST);
   rewriteHomeHeader(env);
 
-  brandAssets(env, light);
+  // The installed Android app takes its launch screen and its bottom system bar from the
+  // manifest, which has one colour for both modes (Chrome has no dark variant yet). Dark
+  // looks right in dark mode and still fine under a light page; the light colour left a
+  // cream bar and a cream flash for people in dark mode.
+  brandAssets(env, dark);
   log(`Applied the "${name}" design to ${pages} pages.`);
 }
 
