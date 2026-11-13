@@ -131,6 +131,8 @@
 
 html {
   color-scheme: light;
+  /* Paint the whole canvas (safe areas, overscroll) in the page colour, light or dark. */
+  background-color: var(--bg);
 }
 @media (prefers-color-scheme: dark) {
   html {

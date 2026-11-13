@@ -721,7 +721,11 @@ function applyTheme(env) {
       } else if (entry.endsWith('.html')) {
         const html = readFileSync(p, 'utf8');
         if (!html.includes('</head>')) continue;
-        writeFileSync(p, brandTitles(html.replace(strip, ''), env.BRAND_NAME).replace('</head>', `${tags}</head>`));
+        // viewport-fit=cover: the page colour reaches the screen edges, so the strip under
+        // the iPhone home line matches the page instead of staying the light colour.
+        const fitted = html.replace(/<meta\s+name="viewport"\s+content="([^"]*)"/i, (m, c) =>
+          /viewport-fit/.test(c) ? m : `<meta name="viewport" content="${c}, viewport-fit=cover"`);
+        writeFileSync(p, brandTitles(fitted.replace(strip, ''), env.BRAND_NAME).replace('</head>', `${tags}</head>`));
         pages++;
       }
     }
@@ -769,6 +773,7 @@ function addPinning(env) {
     `<meta name="apple-mobile-web-app-capable" content="yes" ${PIN_MARK}>` +
     `<meta name="apple-mobile-web-app-title" content="${brand}" ${PIN_MARK}>` +
     `<meta name="apple-mobile-web-app-status-bar-style" content="default" ${PIN_MARK}>` +
+    splashTags() +
     (siteUrl ? `<meta name="paperhaus-site" content="${escapeHtml(siteUrl)}" ${PIN_MARK}>` : '') +
     (sourceUrl ? `<meta name="paperhaus-source" content="${escapeHtml(sourceUrl)}" ${PIN_MARK}>` : '') +
     `<link rel="stylesheet" href="/kit-tools/pin/pin.css?v=${v}" ${PIN_MARK}>` +
@@ -817,6 +822,22 @@ function brandTitles(html, brand) {
     .replace(/<meta\s+(?:name|property)="(?:title|og:title|og:site_name|twitter:title|apple-mobile-web-app-title)"\s+content="[^"]*"/g, swap);
 }
 
+// iPhone launch screens (kit/brand/splash/), light and dark, one per screen size. Without
+// them iOS shows a plain screen in the manifest colour and then jumps to the page, which
+// looks like a flash in dark mode. Made for the "soft" design's page colours.
+const SPLASH_SIZES = [[440, 956, 3], [420, 912, 3], [402, 874, 3], [430, 932, 3], [393, 852, 3], [428, 926, 3], [390, 844, 3], [414, 896, 3], [375, 812, 3], [414, 896, 2], [375, 667, 2]];
+function splashTags() {
+  if (!existsSync(join(BRAND, 'splash'))) return '';
+  let out = '';
+  for (const [w, h, r] of SPLASH_SIZES) {
+    for (const scheme of ['light', 'dark']) {
+      const media = `(device-width: ${w}px) and (device-height: ${h}px) and (-webkit-device-pixel-ratio: ${r}) and (orientation: portrait) and (prefers-color-scheme: ${scheme})`;
+      out += `<link rel="apple-touch-startup-image" media="${media}" href="/images/splash/${scheme}-${w * r}x${h * r}.png" ${PIN_MARK}>`;
+    }
+  }
+  return out;
+}
+
 // The installable app (Add to Home Screen): Paperhaus name, the design's icons, and a
 // Scan shortcut on the app icon. Icons come from kit/brand/icons/.
 function brandWebApp(env, bg) {
@@ -826,6 +847,9 @@ function brandWebApp(env, bg) {
       copyFileSync(join(icons, f), join(DIST, 'images', f));
     }
     copyFileSync(join(icons, 'favicon.ico'), join(DIST, 'favicon.ico'));
+  }
+  if (existsSync(join(BRAND, 'splash')) && existsSync(join(DIST, 'images'))) {
+    cpSync(join(BRAND, 'splash'), join(DIST, 'images', 'splash'), { recursive: true });
   }
   const file = join(DIST, 'site.webmanifest');
   let manifest = {};
