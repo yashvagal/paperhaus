@@ -114,6 +114,28 @@
   line-height: 1.35;
 }
 
+/* ------------------------------------------------------------ moving between pages */
+/* Chrome keeps the old page on screen until the next one is ready, then cross-fades, and
+   the tab bar and top bar stay put instead of blinking. Other browsers ignore this. */
+@view-transition {
+  navigation: auto;
+}
+.ph-tabbar {
+  view-transition-name: ph-tabbar;
+}
+nav[data-simple-nav] {
+  view-transition-name: ph-topbar;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.18s;
+}
+@media (prefers-reduced-motion: reduce) {
+  @view-transition {
+    navigation: none;
+  }
+}
+
 /* ------------------------------------------------------------ phone tab bar, every page */
 .ph-tabbar {
   display: none;

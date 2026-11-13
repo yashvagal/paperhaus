@@ -784,7 +784,10 @@ function addPinning(env) {
     `<link rel="stylesheet" href="/kit-tools/pin/flow.css?v=${v}" ${PIN_MARK}>` +
     // flow.js first: it has to see the blob links tools make for their downloads.
     `<script src="/kit-tools/pin/flow.js?v=${v}" defer ${PIN_MARK}></script>` +
-    `<script src="/kit-tools/pin/pin.js?v=${v}" defer ${PIN_MARK}></script>`;
+    `<script src="/kit-tools/pin/pin.js?v=${v}" defer ${PIN_MARK}></script>` +
+    // Start loading the next page as soon as a link is pressed (Chrome), so moving between
+    // pages is quicker. Only same-site pages, never the API.
+    `<script type="speculationrules" ${PIN_MARK}>{"prefetch":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":"/api/*"}},{"not":{"href_matches":"/cdn-cgi/*"}}]},"eagerness":"conservative"}]}</script>`;
   const homeTags =
     `<link rel="stylesheet" href="/kit-tools/pin/home.css?v=${v}" ${PIN_MARK}>` +
     `<script src="/kit-tools/pin/home.js?v=${v}" defer ${PIN_MARK}></script>`;
@@ -794,6 +797,8 @@ function addPinning(env) {
     new RegExp(`<(?:link|meta)[^>]*${PIN_MARK}[^>]*>`, 'g'),
     /<link\s+rel="(?:manifest|apple-touch-icon)"[^>]*>/g,
     /<meta\s+name="(?:apple-)?mobile-web-app-(?:capable|title|status-bar-style)"[^>]*>/g,
+    new RegExp(`<script type="speculationrules" ${PIN_MARK}>[\\s\\S]*?</script>`, 'g'),
+    new RegExp(`<nav class="ph-tabbar"[^>]*${PIN_MARK}[^>]*>[\\s\\S]*?</nav>`, 'g'),
   ];
   let pages = 0;
   const visit = (d) => {
@@ -808,7 +813,8 @@ function addPinning(env) {
         if (html.includes('name="paperhaus-public"')) continue;
         for (const re of strip) html = html.replace(re, '');
         const isHome = p === join(DIST, 'index.html');
-        writeFileSync(p, html.replace('</head>', `${tags}${isHome ? homeTags : ''}</head>`));
+        html = html.replace('</head>', `${tags}${isHome ? homeTags : ''}</head>`);
+        writeFileSync(p, withTabbar(html, '/' + relative(DIST, p).replace(/\\/g, '/')));
         pages++;
       }
     }
@@ -824,6 +830,26 @@ function brandTitles(html, brand) {
   return html
     .replace(/<title>[\s\S]*?<\/title>/, swap)
     .replace(/<meta\s+(?:name|property)="(?:title|og:title|og:site_name|twitter:title|apple-mobile-web-app-title)"\s+content="[^"]*"/g, swap);
+}
+
+// The phone tab bar (styles in kit/tools/pin/flow.css), written into each page so it is
+// there from the first paint instead of popping in after the scripts run.
+const TABBAR = [
+  ['/', 'ph-house', 'Home', /^\/(index(\.html)?)?$/],
+  ['/scan-document.html', 'ph-scan', 'Scan', /^\/scan-document/],
+  ['/request-signatures.html', 'ph-signature', 'Sign', /^\/(request-signatures|sign-pdf)/],
+  ['/#all-tools', 'ph-squares-four', 'Tools', null],
+  ['/#ph-recent', 'ph-clock-counter-clockwise', 'Recent', null],
+];
+function withTabbar(html, path) {
+  if (!/<body[\s>]/i.test(html)) return html;
+  const links = TABBAR.map(([href, icon, label, re]) =>
+    `<a href="${href}"${re && re.test(path) ? ' aria-current="page"' : ''}><i class="ph ${icon}" aria-hidden="true"></i>${label}</a>`).join('');
+  const nav = `<nav class="ph-tabbar" aria-label="Quick actions" ${PIN_MARK}>${links}</nav>`;
+  return html.replace(/<body([^>]*)>/i, (m, attrs) => {
+    const a = /class="/.test(attrs) ? attrs.replace(/class="([^"]*)"/, (c, v) => (/\bph-has-tabbar\b/.test(v) ? c : `class="${v} ph-has-tabbar"`)) : `${attrs} class="ph-has-tabbar"`;
+    return `<body${a}>${nav}`;
+  });
 }
 
 // iPhone launch screens (kit/brand/splash/), light and dark, one per screen size. Without

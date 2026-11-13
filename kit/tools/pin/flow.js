@@ -365,7 +365,20 @@
   ];
 
   function tabbar() {
-    if (document.querySelector('.ph-tabbar')) return;
+    // Normally already in the page (written in at build time); made here only as a fallback.
+    if (!document.querySelector('.ph-tabbar')) makeTabbar();
+    // Out of the way while typing, so it does not ride on top of the phone keyboard.
+    document.addEventListener('focusin', function (e) {
+      if (e.target && e.target.matches && e.target.matches('input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]), textarea, select, [contenteditable="true"]')) {
+        document.body.classList.add('ph-typing');
+      }
+    });
+    document.addEventListener('focusout', function () {
+      document.body.classList.remove('ph-typing');
+    });
+  }
+
+  function makeTabbar() {
     var nav = el('nav', 'ph-tabbar');
     nav.setAttribute('aria-label', 'Quick actions');
     TABS.forEach(function (t) {
@@ -378,15 +391,6 @@
     });
     document.body.appendChild(nav);
     document.body.classList.add('ph-has-tabbar');
-    // Out of the way while typing, so it does not ride on top of the phone keyboard.
-    document.addEventListener('focusin', function (e) {
-      if (e.target && e.target.matches && e.target.matches('input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]), textarea, select, [contenteditable="true"]')) {
-        document.body.classList.add('ph-typing');
-      }
-    });
-    document.addEventListener('focusout', function () {
-      document.body.classList.remove('ph-typing');
-    });
   }
 
   window.paperhausFlow = { list: list, get: get, put: put, clear: clear, kindOf: kindOf, toolHref: toolHref, showDone: showDone };
