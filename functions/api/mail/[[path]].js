@@ -2,12 +2,15 @@
  * Paperhaus mail API: connect a Gmail account and send from it. Behind the Paperhaus
  * sign-in (Cloudflare Access), so every request carries the signed-in person's email.
  *
- *   GET  /api/mail/status          { configured, connected, gmail, name }
+ *   GET  /api/mail/status          { configured, connected, accounts: [{ gmail, name }], primary }
  *   GET  /api/mail/connect         starts Google sign-in (opened in a popup)
  *   GET  /api/mail/callback        Google sends the person back here
- *   POST /api/mail/disconnect      forget the connection and revoke it at Google
- *   POST /api/mail/send            { to, subject, text, esign?: { id, t, index } }
- *   POST /api/mail/esign           { id, t, title, senderName, notify, signers: [{ name, email }] }
+ *   POST /api/mail/disconnect      { gmail } forget that account and revoke it at Google
+ *   POST /api/mail/primary         { gmail } send from this account by default
+ *   POST /api/mail/send            { to, subject, text, from?, esign?: { id, t, index } }
+ *   POST /api/mail/esign           { id, t, title, senderName, notify, from, signers: [{ name, email }] }
+ *
+ * One person can connect several Gmail accounts and pick which one sends.
  *
  * /api/mail/esign records what Paperhaus needs to email people about a signing request
  * later (functions/api/esign/ sends "signed", "your turn" and "everyone signed" notes).
@@ -16,6 +19,7 @@
 import {
   GMAIL_SCOPE,
   deleteAccount,
+  getAccounts,
   googleUrls,
   getAccount,
   getRequestMail,
@@ -25,6 +29,7 @@ import {
   saveAccount,
   saveRequestMail,
   sendMail,
+  setPrimary,
   sha256hex,
 } from '../../_shared/gmail.js';
 
@@ -41,8 +46,9 @@ export async function onRequest(context) {
   const redirectUri = `${url.origin}/api/mail/callback`;
   try {
     if (request.method === 'GET' && action === 'status') {
-      const acct = await getAccount(env, user);
-      return json({ configured: true, connected: !!acct, gmail: acct ? acct.gmail : null, name: acct ? acct.name : null });
+      const all = await getAccounts(env, user);
+      const accounts = all ? all.accounts.map((a) => ({ gmail: a.gmail, name: a.name })) : [];
+      return json({ configured: true, connected: accounts.length > 0, accounts, primary: all ? all.primary : null });
     }
     if (request.method === 'GET' && action === 'connect') {
       const state = randomHex(16);
@@ -54,7 +60,7 @@ export async function onRequest(context) {
         response_type: 'code',
         scope: `openid email profile ${GMAIL_SCOPE}`,
         access_type: 'offline',
-        prompt: 'consent',
+        prompt: 'select_account consent',
         include_granted_scopes: 'true',
         state,
       });
@@ -63,12 +69,16 @@ export async function onRequest(context) {
     }
     if (request.method === 'GET' && action === 'callback') return await callback(env, url, user, redirectUri);
     if (request.method === 'POST' && action === 'disconnect') {
-      const acct = await getAccount(env, user);
-      if (acct && acct.refresh) {
-        await fetch(`${googleUrls(env).revoke}?token=${encodeURIComponent(acct.refresh)}`, { method: 'POST' }).catch(() => undefined);
+      const b = await request.json().catch(() => ({}));
+      const gone = await deleteAccount(env, user, b.gmail || '');
+      for (const a of gone) {
+        if (a.refresh) await fetch(`${googleUrls(env).revoke}?token=${encodeURIComponent(a.refresh)}`, { method: 'POST' }).catch(() => undefined);
       }
-      await deleteAccount(env, user);
       return json({ ok: true });
+    }
+    if (request.method === 'POST' && action === 'primary') {
+      const b = await request.json().catch(() => ({}));
+      return (await setPrimary(env, user, b.gmail)) ? json({ ok: true }) : json({ error: 'not_connected' }, 404);
     }
     if (request.method === 'POST' && action === 'send') return await send(request, env, user);
     if (request.method === 'POST' && action === 'esign') return await esignSetup(request, env, user);
@@ -134,7 +144,8 @@ async function send(request, env, user) {
     if (!rec) return json({ error: 'forbidden' }, 403);
     if (!(Number.isInteger(index) && index >= 0 && index < rec.mail.signers.length)) return json({ error: 'bad_index' }, 400);
   }
-  const out = await sendMail(env, user, { to: body.to, subject, text, fromName: body.fromName });
+  const from = rec ? rec.mail.gmail : body.from;
+  const out = await sendMail(env, user, { to: body.to, subject, text, fromName: body.fromName, from });
   if (rec) {
     rec.mail.signers[index] = { ...rec.mail.signers[index], threadId: out.threadId, messageId: out.messageId, sentAt: Date.now() };
     await saveRequestMail(env, id, rec.mail, Math.floor((rec.meta.retainUntil || rec.meta.expires) / 1000));
@@ -148,7 +159,8 @@ async function esignSetup(request, env, user) {
   if (!meta || meta.sender !== user || meta.senderToken !== (await sha256hex(String(b.t || '')))) return json({ error: 'forbidden' }, 403);
   const signers = Array.isArray(b.signers) ? b.signers.slice(0, meta.n) : [];
   if (signers.length !== meta.n || !signers.every((s) => isEmail(s.email))) return json({ error: 'bad_signers' }, 400);
-  const acct = await getAccount(env, user);
+  const acct = await getAccount(env, user, b.from);
+  if (!acct) return json({ error: 'gmail_not_connected' }, 409);
   const rec = {
     title: String(b.title || 'your document').slice(0, 200),
     senderName: String(b.senderName || '').slice(0, 100),

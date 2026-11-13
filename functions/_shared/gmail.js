@@ -94,31 +94,67 @@ export async function unlock(env, s) {
 
 // ---------------------------------------------------------------- connected accounts
 
-const accountKey = async (email) => `g:${await sha256hex(String(email).toLowerCase())}`;
+const userKey = async (email) => `g:${await sha256hex(String(email).toLowerCase())}`;
+const tokenKey = async (user, gmail) => `gt:${(await userKey(user)).slice(2, 34)}:${(await sha256hex(String(gmail).toLowerCase())).slice(0, 32)}`;
 
-/** The Gmail account a Paperhaus user connected: { refresh, gmail, name, at } or null. */
-export async function getAccount(env, email) {
-  if (!email) return null;
-  return unlock(env, await env.ESIGN.get(await accountKey(email)));
+/**
+ * The Gmail accounts a Paperhaus user connected (one person can connect several):
+ * { accounts: [{ refresh, gmail, name, at }], primary } or null.
+ */
+export async function getAccounts(env, user) {
+  if (!user) return null;
+  const data = await unlock(env, await env.ESIGN.get(await userKey(user)));
+  if (!data) return null;
+  // First version kept a single account.
+  if (data.refresh) return { accounts: [data], primary: data.gmail };
+  return data.accounts && data.accounts.length ? data : null;
 }
 
-export async function saveAccount(env, email, acct) {
-  await env.ESIGN.put(await accountKey(email), await lock(env, acct));
+/** One connected account: the one for this address, or the primary one. */
+export async function getAccount(env, user, gmail) {
+  const all = await getAccounts(env, user);
+  if (!all) return null;
+  const want = String(gmail || all.primary || '').toLowerCase();
+  return all.accounts.find((a) => a.gmail.toLowerCase() === want) || all.accounts[0];
 }
 
-export async function deleteAccount(env, email) {
-  const key = await accountKey(email);
-  await env.ESIGN.delete(key);
-  await env.ESIGN.delete(`gt:${key.slice(2)}`);
+/** Add or replace a connected account; a newly connected one becomes the primary. */
+export async function saveAccount(env, user, acct) {
+  const all = (await getAccounts(env, user)) || { accounts: [], primary: null };
+  const rest = all.accounts.filter((a) => a.gmail.toLowerCase() !== acct.gmail.toLowerCase());
+  const next = { accounts: [...rest, acct].slice(-10), primary: acct.gmail };
+  await env.ESIGN.put(await userKey(user), await lock(env, next));
 }
 
-/** A short-lived Gmail access token for this user, refreshed when needed. */
-async function accessToken(env, email) {
-  const key = await accountKey(email);
-  const cached = await unlock(env, await env.ESIGN.get(`gt:${key.slice(2)}`));
-  if (cached && cached.exp > Date.now() + 60000) return cached;
-  const acct = await getAccount(env, email);
+export async function setPrimary(env, user, gmail) {
+  const all = await getAccounts(env, user);
+  if (!all || !all.accounts.some((a) => a.gmail.toLowerCase() === String(gmail).toLowerCase())) return false;
+  all.primary = all.accounts.find((a) => a.gmail.toLowerCase() === String(gmail).toLowerCase()).gmail;
+  await env.ESIGN.put(await userKey(user), await lock(env, all));
+  return true;
+}
+
+/** Forget one account (or all of them when gmail is empty). Returns the removed ones. */
+export async function deleteAccount(env, user, gmail) {
+  const all = await getAccounts(env, user);
+  if (!all) return [];
+  const drop = all.accounts.filter((a) => !gmail || a.gmail.toLowerCase() === String(gmail).toLowerCase());
+  const keep = all.accounts.filter((a) => !drop.includes(a));
+  for (const a of drop) await env.ESIGN.delete(await tokenKey(user, a.gmail));
+  if (keep.length) {
+    const primary = keep.some((a) => a.gmail === all.primary) ? all.primary : keep[0].gmail;
+    await env.ESIGN.put(await userKey(user), await lock(env, { accounts: keep, primary }));
+  } else await env.ESIGN.delete(await userKey(user));
+  return drop;
+}
+
+/** A short-lived Gmail access token for one of this user's accounts, refreshed when needed. */
+async function accessToken(env, user, gmail) {
+  const acct = await getAccount(env, user, gmail);
   if (!acct || !acct.refresh) throw mailError('gmail_not_connected');
+  const cacheKey = await tokenKey(user, acct.gmail);
+  const cached = await unlock(env, await env.ESIGN.get(cacheKey));
+  if (cached && cached.exp > Date.now() + 60000) return cached;
   const r = await fetch(googleUrls(env).token, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -132,11 +168,11 @@ async function accessToken(env, email) {
   const data = await r.json().catch(() => ({}));
   if (!r.ok || !data.access_token) {
     // Revoked or expired at Google's end: forget it, so Paperhaus asks to connect again.
-    if (data.error === 'invalid_grant') await deleteAccount(env, email);
+    if (data.error === 'invalid_grant') await deleteAccount(env, user, acct.gmail);
     throw mailError(data.error === 'invalid_grant' ? 'gmail_not_connected' : 'gmail_token_failed');
   }
   const tok = { token: data.access_token, exp: Date.now() + (Number(data.expires_in) || 3600) * 1000, gmail: acct.gmail, name: acct.name };
-  await env.ESIGN.put(`gt:${key.slice(2)}`, await lock(env, tok), { expirationTtl: Math.max(120, (Number(data.expires_in) || 3600) - 120) });
+  await env.ESIGN.put(cacheKey, await lock(env, tok), { expirationTtl: Math.max(120, (Number(data.expires_in) || 3600) - 120) });
   return tok;
 }
 
@@ -159,12 +195,13 @@ function address(name, email) {
 
 /**
  * Send a plain-text email from this Paperhaus user's connected Gmail.
- * to: an address or a list. Returns { id, threadId, messageId }.
+ * to: an address or a list; from: which connected Gmail (default: the primary one).
+ * Returns { id, threadId, messageId, from }.
  */
-export async function sendMail(env, userEmail, { to, subject, text, threadId, inReplyTo, fromName }) {
+export async function sendMail(env, userEmail, { to, subject, text, threadId, inReplyTo, fromName, from }) {
   const list = (Array.isArray(to) ? to : [to]).map((x) => String(x).trim()).filter(Boolean);
   if (!list.length || list.length > 20 || !list.every(isEmail)) throw mailError('bad_recipient');
-  const tok = await accessToken(env, userEmail);
+  const tok = await accessToken(env, userEmail, from);
   const messageId = `<${randomHex(16)}@paperhaus.pages.dev>`;
   const body = b64(enc.encode(String(text || '').slice(0, 20000))).replace(/.{1,76}/g, '$&\r\n');
   const headers = [
@@ -189,7 +226,7 @@ export async function sendMail(env, userEmail, { to, subject, text, threadId, in
     e.detail = data.error && data.error.message;
     throw e;
   }
-  return { id: data.id, threadId: data.threadId, messageId };
+  return { id: data.id, threadId: data.threadId, messageId, from: tok.gmail };
 }
 
 // ---------------------------------------------------------------- per-request mail record

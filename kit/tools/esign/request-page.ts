@@ -575,8 +575,8 @@ async function create(): Promise<void> {
 
 // ------------------------------------------------------------------ Gmail: send automatically
 
-/** The signed-in person's Gmail connection (functions/api/mail). */
-const gmail = { configured: false, connected: false, address: '' };
+/** The signed-in person's Gmail connections (functions/api/mail); address is the one sending. */
+const gmail = { configured: false, connected: false, address: '', accounts: [] as { gmail: string; name: string }[] };
 
 async function loadGmail(): Promise<void> {
   try {
@@ -585,7 +585,9 @@ async function loadGmail(): Promise<void> {
       const j = await r.json();
       gmail.configured = !!j.configured;
       gmail.connected = !!j.connected;
-      gmail.address = j.gmail || '';
+      gmail.accounts = Array.isArray(j.accounts) ? j.accounts : [];
+      const saved = prefs.get('mail-from');
+      gmail.address = (gmail.accounts.find((a) => a.gmail === saved) || gmail.accounts.find((a) => a.gmail === j.primary) || gmail.accounts[0] || { gmail: '' }).gmail;
     }
   } catch {
     /* not deployed with mail: drafts as before */
@@ -617,10 +619,34 @@ function renderMail(): void {
   }
   box.innerHTML = `
     <div class="es-mail-row"><i class="ph ph-check-circle" style="color:var(--es-good)"></i>
-      <div style="min-width:0;flex:1"><strong></strong><span>Connected Gmail. <button type="button" class="es-linkbtn" id="es-gmail-off">Disconnect</button></span></div></div>
+      <div style="min-width:0;flex:1"><strong>Send from</strong><span>Your connected Gmail accounts.</span></div>
+      <button id="es-gmail-add" class="es-btn es-small" type="button"><i class="ph ph-plus"></i> Add another Gmail</button></div>
+    <div class="es-accounts" role="radiogroup" aria-label="Send from"></div>
     <label class="es-check-row"><input type="checkbox" id="es-auto" /> Send the invites automatically</label>
     <label class="es-check-row"><input type="checkbox" id="es-notify" /> Email me when someone signs or declines, and when everyone is done</label>`;
-  box.querySelector('strong')!.textContent = gmail.address;
+  const list = box.querySelector('.es-accounts')!;
+  for (const a of gmail.accounts) {
+    const row = document.createElement('div');
+    row.className = 'es-account';
+    row.innerHTML = '<label class="es-check-row"><input type="radio" name="es-mailfrom" /> <span></span></label><button type="button" class="es-linkbtn">Disconnect</button>';
+    const radio = row.querySelector('input')!;
+    radio.value = a.gmail;
+    radio.checked = a.gmail === gmail.address;
+    row.querySelector('span')!.textContent = a.gmail;
+    radio.addEventListener('change', () => {
+      gmail.address = a.gmail;
+      prefs.set('mail-from', a.gmail);
+      $<HTMLInputElement>('es-from').value = a.gmail;
+      void mailPost('/api/mail/primary', { gmail: a.gmail }).catch((): undefined => undefined);
+    });
+    row.querySelector('button')!.addEventListener('click', async () => {
+      await mailPost('/api/mail/disconnect', { gmail: a.gmail }).catch((): undefined => undefined);
+      toast(`Disconnected ${a.gmail}`);
+      await loadGmail();
+    });
+    list.appendChild(row);
+  }
+  $('es-gmail-add').addEventListener('click', connectGmail);
   const auto = $<HTMLInputElement>('es-auto');
   const note = $<HTMLInputElement>('es-notify');
   auto.checked = autoSend();
@@ -630,17 +656,11 @@ function renderMail(): void {
     renderMail();
   });
   note.addEventListener('change', () => prefs.set('notify', note.checked ? '1' : '0'));
-  $('es-gmail-off').addEventListener('click', async () => {
-    await fetch('/api/mail/disconnect', { method: 'POST', credentials: 'same-origin' }).catch((): undefined => undefined);
-    gmail.connected = false;
-    gmail.address = '';
-    renderMail();
-    toast('Gmail disconnected');
-  });
 }
 
 function connectGmail(): void {
-  const hint = $<HTMLInputElement>('es-from').value.trim();
+  // Adding another account: no hint, so Google lets you pick a different one.
+  const hint = gmail.connected ? '' : $<HTMLInputElement>('es-from').value.trim();
   const w = window.open(`/api/mail/connect${hint ? `?hint=${encodeURIComponent(hint)}` : ''}`, 'paperhaus-gmail', 'width=520,height=680');
   if (!w) {
     showAlert('Allow the pop-up', 'Your browser blocked the Google sign-in window. Allow pop-ups for Paperhaus and press Connect Gmail again.');
@@ -651,6 +671,7 @@ function connectGmail(): void {
     window.removeEventListener('message', done);
     if (e.data.paperhausGmail === 'connected') {
       toast(`Connected ${e.data.gmail}`);
+      prefs.set('mail-from', e.data.gmail);
       void loadGmail();
     }
   };
@@ -690,6 +711,7 @@ async function mailSetup(s: Sent): Promise<void> {
     title: s.title,
     senderName: s.fromName,
     notify: notifyMe(),
+    from: s.from,
     signers: s.signers.map((x, i) => ({ name: x.name, email: x.email, me: isMe(s, i) })),
   });
 }
@@ -946,7 +968,7 @@ async function fillSent(item: HTMLElement, s: Sent): Promise<void> {
       b.addEventListener('click', async () => {
         b.disabled = true;
         try {
-          await mailPost('/api/mail/send', { to: s.signers.map((x) => x.email), subject: m.subject, text: m.body, fromName: s.fromName });
+          await mailPost('/api/mail/send', { to: s.signers.map((x) => x.email), subject: m.subject, text: m.body, fromName: s.fromName, from: s.from });
           toast('Sent everyone the signed copy');
         } catch (err) {
           showAlert('Could not send it', String((err as Error).message || err));

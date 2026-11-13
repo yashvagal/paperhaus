@@ -739,6 +739,14 @@ function applyTheme(env) {
 // the iPhone home screen tags, and the Pin button and account chip from kit/tools/pin/.
 const PIN_MARK = 'data-paperhaus-pin';
 
+// Plain pages anyone can open (no sign-in), such as privacy.html, which Google asks for
+// before Gmail sending can be switched on. Copied as is from kit/public/.
+function copyPublicPages() {
+  const src = join(KIT, 'public');
+  if (!existsSync(src)) return;
+  for (const f of readdirSync(src)) copyFileSync(join(src, f), join(DIST, f));
+}
+
 function addPinning(env) {
   const out = join(DIST, 'kit-tools', 'pin');
   mkdirSync(out, { recursive: true });
@@ -960,6 +968,7 @@ try {
 
 fetchEngines(versions, env, urls);
 splitLargeFiles();
+copyPublicPages();
 applyTheme(env);
 addPinning(env);
 writeHeaders();

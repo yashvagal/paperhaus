@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="paperhaus-public" content="1">
+<title>Paperhaus privacy</title>
+<style>
+  :root { color-scheme: light dark; --bg: #fbf1e4; --fg: #3a2a1f; --muted: #6b5646; --accent: #b35a22; --line: #f0e1cd; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1d1712; --fg: #f3e7da; --muted: #c9b5a3; --accent: #f7a86e; --line: #3a2e25; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 42rem; margin: 0 auto; padding: 2.5rem max(16px, env(safe-area-inset-left, 0px)) 3rem max(16px, env(safe-area-inset-right, 0px)); }
+  h1 { font-size: 2rem; letter-spacing: -0.02em; margin: 0 0 0.3rem; }
+  h2 { font-size: 1.15rem; margin: 2rem 0 0.4rem; }
+  p, li { color: var(--fg); }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); }
+  ul { padding-left: 1.2rem; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Paperhaus privacy</h1>
+  <p class="muted">Paperhaus is a private PDF toolkit run by Yash Vagal for invited people. Last updated November 12, 2026.</p>
+
+  <h2>Your files</h2>
+  <p>Most tools work entirely in your browser. Your files are not uploaded and nothing is stored on a server. Recent files are kept only in your own browser, and you can clear them from the account menu.</p>
+
+  <h2>Signing requests</h2>
+  <p>When you send a document for signature, it is encrypted in your browser before it is stored. The key is only in the signing links, so Paperhaus stores data it cannot read. Paperhaus keeps an audit trail of each request (times, IP addresses and browsers) and deletes the request after the period the sender chose: 14 days, 1 year or 7 years.</p>
+
+  <h2>Google account data</h2>
+  <p>If you connect Gmail, Paperhaus asks Google only for permission to send email (<code>gmail.send</code>) plus your name and email address. It cannot read, search or delete your mail.</p>
+  <ul>
+    <li>Paperhaus uses this permission only to send the emails you ask it to send: signing invites, "your turn" notes, notices to you when people sign or decline, and the "everyone has signed" message.</li>
+    <li>Your Google sign-in token is stored encrypted and is used for nothing else. It is not shared, sold or used for advertising, and no person reads it.</li>
+    <li>The text of those emails passes through Paperhaus on its way to Gmail and is not stored, except what is needed to send the later notices for a request (its title, names, email addresses and email threads), which is stored encrypted and deleted with the request.</li>
+    <li>You can disconnect at any time on the Sign page, or remove Paperhaus at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>. Disconnecting deletes the stored token.</li>
+  </ul>
+  <p>Paperhaus's use of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+
+  <h2>Who runs it</h2>
+  <p>Paperhaus is hosted on Cloudflare and its code is public at <a href="https://github.com/yashvagal/paperhaus">github.com/yashvagal/paperhaus</a>. Questions: ask the person who invited you, or open an issue at <a href="https://github.com/yashvagal/paperhaus/issues">github.com/yashvagal/paperhaus/issues</a>.</p>
+  <hr>
+  <p class="muted"><a href="/">Open Paperhaus</a> (invited people only)</p>
+</main>
+</body>
+</html>
