@@ -113,7 +113,7 @@ declines or everyone is done, and the next signer gets an "it's your turn" note.
    `GOOGLE_CLIENT_ID` (text) with the client ID, and `GOOGLE_CLIENT_SECRET` (secret) with
    the client secret, for **Production**. Save, then **Deployments → Retry deployment** on
    the latest one so the new variables apply.
-8. On the Sign page, press **Connect Gmail** and allow sending. Everyone else who sends
+8. On the Sign page, under **Send from**, type the address to send from, press **Connect** and allow sending (add more addresses with **Another address...**). Everyone else who sends
    requests presses it once for their own Gmail.
 
 The `gmail.send` permission can send email only; it cannot read your mail. You can

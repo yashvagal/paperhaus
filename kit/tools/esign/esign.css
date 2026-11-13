@@ -1054,3 +1054,24 @@
 .es-account .es-check-row span {
   overflow-wrap: anywhere;
 }
+
+.es-from-pick {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-left: 2.1rem;
+  min-width: 0;
+}
+.es-from-pick .es-input {
+  flex: 1;
+  min-width: 0;
+}
+#es-newfrom-note {
+  padding-left: 2.1rem;
+}
+@media (max-width: 520px) {
+  .es-from-pick,
+  #es-newfrom-note {
+    padding-left: 0;
+  }
+}
