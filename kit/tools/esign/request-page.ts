@@ -557,7 +557,7 @@ async function create(): Promise<void> {
     if (autoSend()) {
       busy('Sending the invites from your Gmail...');
       const failed = await sendAllInvites(sent);
-      if (failed) showAlert('Some invites did not go out', 'Use the Send or Gmail buttons next to those people to send them.');
+      if (failed) showAlert('Some invites did not go out', `${lastMailError ? `Gmail said: ${lastMailError}. ` : ''}Use the Send or Gmail buttons next to those people to send them.`);
       else toast('Invites sent from your Gmail');
     }
     showReady(sent);
@@ -775,11 +775,14 @@ async function sendInvite(s: Sent, i: number): Promise<void> {
 }
 
 /** Send every invite (not the sender's own) through Gmail. Returns how many failed. */
+let lastMailError = '';
 async function sendAllInvites(s: Sent): Promise<number> {
+  lastMailError = '';
   try {
     await mailSetup(s);
   } catch (err) {
     console.warn('Mail setup failed', err);
+    lastMailError = String((err as Error).message || err).slice(0, 200);
     return s.signers.length;
   }
   let failed = 0;
@@ -789,6 +792,7 @@ async function sendAllInvites(s: Sent): Promise<number> {
       await sendInvite(s, i);
     } catch (err) {
       console.warn('Invite failed', err);
+      lastMailError = String((err as Error).message || err).slice(0, 200);
       failed++;
     }
   }
