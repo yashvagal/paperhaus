@@ -29,6 +29,10 @@ Owner: Yash Vagal. Review: every 6 months, and after any incident or major chang
   Paperhaus stores ciphertext it cannot read, plus times, IP addresses and browsers for
   the audit trail.
 - HTML to PDF fetches the page the user asks for and stores nothing.
+- Gmail sending (optional): each person who connects Gmail grants only `gmail.send`.
+  Their refresh token is stored encrypted with a key derived from GOOGLE_CLIENT_SECRET.
+  Invite text passes through the server to Gmail and is not stored; each request's
+  title, names, emails and invite threads are stored encrypted until it is deleted.
 
 ## 3. Electronic signatures and records
 
@@ -83,7 +87,8 @@ Owner: Yash Vagal. Review: every 6 months, and after any incident or major chang
 | Cloudflare | Hosting (Pages), sign-in (Access), storage (KV) | Encrypted signing requests, seal key, audit trails |
 | GitHub | Source code, scanning, dependency updates | Code only |
 | DigiCert, Sectigo, SSL.com | Timestamps (RFC 3161) | Only a hash of the seal signature |
-| Gmail or Outlook (the sender's own) | Sending signing links | The emails the sender sends |
+| Google (Gmail API, the sender's own account) | Sending invites and signing notifications | The emails sent; Paperhaus keeps an encrypted refresh token per connected person |
+| Gmail or Outlook (the sender's own) | Sending signing links by hand | The emails the sender sends |
 
 ## Not covered
 

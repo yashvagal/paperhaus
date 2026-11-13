@@ -37,6 +37,7 @@
  */
 
 import { sealDigest, b64 as b64u8 } from '../../_shared/seal.js';
+import { getRequestMail, mailConfigured, sendMail } from '../../_shared/gmail.js';
 
 const DAYS = 14; // time to sign
 const KEEP = [14, 365, 2555]; // how long the signed record is kept: 14 days, 1 year, 7 years
@@ -68,8 +69,12 @@ export async function onRequest(context) {
       if (method === 'GET' && action === 'doc') return bytes(await env.ESIGN.get(`d:${id}`, 'arrayBuffer'));
       if (method === 'GET' && action === 'subs') return json(await subs(env, id, meta));
       if (method === 'POST' && action === 'view') return await view(request, env, id, meta, who);
-      if (method === 'POST' && action === 'sign') return await sign(request, env, id, meta, who);
-      if (method === 'POST' && action === 'decline') return await decline(request, env, id, meta, who);
+      if (method === 'POST' && (action === 'sign' || action === 'decline')) {
+        const res = action === 'sign' ? await sign(request, env, id, meta, who) : await decline(request, env, id, meta, who);
+        // Emails about it (from the sender's Gmail, when connected) go out after the reply.
+        if (res.ok && mailConfigured(env)) context.waitUntil(notify(env, id, action, who.index, res.clone(), url.origin));
+        return res;
+      }
       if (method === 'POST' && action === 'cancel') return await cancel(env, id, meta, who);
       if (method === 'POST' && action === 'seal') return await seal(request, env, id, meta);
       if (method === 'POST' && action === 'final') return await storeFinal(request, env, id, meta, who);
@@ -224,7 +229,7 @@ async function decline(request, env, id, meta, who) {
 
 async function cancel(env, id, meta, who) {
   if (who.role !== 'sender') return json({ error: 'not_the_sender' }, 403);
-  const keys = [`m:${id}`, `d:${id}`, `e:${id}`, `a:${id}`, `f:${id}`];
+  const keys = [`m:${id}`, `d:${id}`, `e:${id}`, `a:${id}`, `f:${id}`, `ml:${id}`];
   for (let i = 0; i < meta.n; i++) keys.push(`s:${id}:${i}`, `v:${id}:${i}`);
   await Promise.all(keys.map((k) => env.ESIGN.delete(k)));
   return json({ ok: true });
@@ -316,6 +321,73 @@ function exp(meta) {
 }
 function retainUntil(meta) {
   return meta.retainUntil || meta.expires;
+}
+
+// ---------------------------------------------------------------- emails about a request
+
+/**
+ * After someone signs or declines: tell the sender, tell the next signer it is their turn
+ * (in order), and tell everyone when all have signed. Sent from the sender's own Gmail,
+ * only when they connected it and sent the invites through Paperhaus. Never blocks or
+ * breaks signing: any failure is only logged.
+ */
+async function notify(env, id, action, index, res, origin) {
+  try {
+    const rec = await getRequestMail(env, id);
+    if (!rec) return;
+    const meta = await env.ESIGN.get(`m:${id}`, 'json');
+    if (!meta) return;
+    const st = await res.json();
+    const signers = rec.signers;
+    const who = signers[index] || { name: `Signer ${index + 1}` };
+    const name = who.name || `Signer ${index + 1}`;
+    const first = (n) => String(n || '').split(/\s+/)[0] || 'there';
+    const title = rec.title;
+    const from = rec.senderName;
+    const manage = `${origin}/request-signatures.html`;
+    const signedCount = (st.signers || []).filter((x) => x.signed).length;
+    const jobs = [];
+    const toOwner = (subject, text) => {
+      if (rec.notify && rec.notifyTo) jobs.push(sendMail(env, meta.sender, { to: rec.notifyTo, subject, text: `${text}\n\nSee every request: ${manage}\n\nPaperhaus`, fromName: 'Paperhaus' }));
+    };
+    const toSigner = (s, text) => {
+      if (!s || s.me || !s.email) return;
+      jobs.push(
+        sendMail(env, meta.sender, {
+          to: s.email,
+          subject: `Re: Please sign: ${title}`,
+          text: `Hi ${first(s.name)},\n\n${text}\n\n${from}`,
+          threadId: s.threadId,
+          inReplyTo: s.messageId,
+          fromName: from,
+        })
+      );
+    };
+    if (action === 'decline') {
+      const reason = meta.declined && meta.declined.reason ? `\n\nTheir reason: ${meta.declined.reason}` : '';
+      toOwner(`${name} declined: ${title}`, `${name} declined to sign "${title}". The request is closed.${reason}`);
+    } else if (st.status === 'complete') {
+      toOwner(`Everyone signed: ${title}`, `All ${meta.n} ${meta.n === 1 ? 'person has' : 'people have'} signed "${title}". The signed PDF is sealed and timestamped. Download it from Sent for signature on the Sign page.`);
+      for (const s of signers) if (s.threadId) toSigner(s, `Everyone has signed "${title}". Open the signing link in my earlier email to download the signed, sealed copy.`);
+    } else {
+      let next = null;
+      if (meta.ordered) {
+        const i = index + 1;
+        if (i < signers.length && !(st.signers[i] && st.signers[i].signed)) next = { ...signers[i], i };
+      }
+      const left = meta.n - signedCount;
+      toOwner(
+        `${name} signed: ${title}`,
+        `${name} signed "${title}" (${signedCount} of ${meta.n}). ${left} still to sign${next ? `, ${next.me ? 'you are' : `${next.name} is`} next` : ''}.`
+      );
+      if (next && next.me) toOwner(`Your turn to sign: ${title}`, `${name} has signed "${title}" and it is your turn. Open it from Sent for signature on the Sign page.`);
+      else if (next && next.threadId) toSigner(next, `It's your turn to sign "${title}". ${name} has signed. Use the signing link in my earlier email.`);
+    }
+    const results = await Promise.allSettled(jobs);
+    for (const r of results) if (r.status === 'rejected') console.warn('Paperhaus mail:', r.reason && (r.reason.code || r.reason.message));
+  } catch (err) {
+    console.warn('Paperhaus mail:', err && err.message);
+  }
 }
 
 // ---------------------------------------------------------------- helpers

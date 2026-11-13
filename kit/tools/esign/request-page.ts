@@ -65,6 +65,8 @@ interface Sent {
   expires: number;
   retainUntil?: number;
   ordered: boolean;
+  /** When each signer's invite went out through the sender's Gmail (null: not sent by Paperhaus). */
+  mailed?: (number | null)[];
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -338,6 +340,7 @@ function setMode(mode: Mode, user = true): void {
   });
   renderSigners();
   renderFields();
+  renderMail();
 }
 
 function keepDays(): number {
@@ -551,6 +554,12 @@ async function create(): Promise<void> {
       location.href = signLink(sent.id, key, tokens[0]);
       return;
     }
+    if (autoSend()) {
+      busy('Sending the invites from your Gmail...');
+      const failed = await sendAllInvites(sent);
+      if (failed) showAlert('Some invites did not go out', 'Use the Send or Gmail buttons next to those people to send them.');
+      else toast('Invites sent from your Gmail');
+    }
     showReady(sent);
     void renderSent();
   } catch (err) {
@@ -562,6 +571,161 @@ async function create(): Promise<void> {
   } finally {
     busy(null);
   }
+}
+
+// ------------------------------------------------------------------ Gmail: send automatically
+
+/** The signed-in person's Gmail connection (functions/api/mail). */
+const gmail = { configured: false, connected: false, address: '' };
+
+async function loadGmail(): Promise<void> {
+  try {
+    const r = await fetch('/api/mail/status', { credentials: 'same-origin' });
+    if (r.ok && (r.headers.get('content-type') || '').includes('json')) {
+      const j = await r.json();
+      gmail.configured = !!j.configured;
+      gmail.connected = !!j.connected;
+      gmail.address = j.gmail || '';
+    }
+  } catch {
+    /* not deployed with mail: drafts as before */
+  }
+  if (gmail.connected) {
+    const from = $<HTMLInputElement>('es-from');
+    from.value = gmail.address;
+  }
+  renderMail();
+}
+
+const autoSend = (): boolean => gmail.connected && prefs.get('auto-send') !== '0';
+const notifyMe = (): boolean => prefs.get('notify') !== '0';
+
+function renderMail(): void {
+  const box = $('es-mail');
+  const fromLabel = $<HTMLInputElement>('es-from').closest('label') as HTMLElement;
+  box.classList.toggle('hidden', !gmail.configured || ui.mode === 'me');
+  fromLabel.classList.toggle('es-collapsed', autoSend());
+  if (!gmail.configured) return;
+  if (!gmail.connected) {
+    box.innerHTML = `
+      <div class="es-mail-row"><i class="ph ph-envelope-simple-open"></i>
+        <div style="min-width:0;flex:1"><strong>Send the invites for you</strong>
+        <span>Connect your Gmail once. Paperhaus then sends each invite from your address and emails you when people sign.</span></div>
+        <button id="es-gmail-connect" class="es-btn es-small es-primary" type="button"><i class="ph ph-google-logo"></i> Connect Gmail</button></div>`;
+    $('es-gmail-connect').addEventListener('click', connectGmail);
+    return;
+  }
+  box.innerHTML = `
+    <div class="es-mail-row"><i class="ph ph-check-circle" style="color:var(--es-good)"></i>
+      <div style="min-width:0;flex:1"><strong></strong><span>Connected Gmail. <button type="button" class="es-linkbtn" id="es-gmail-off">Disconnect</button></span></div></div>
+    <label class="es-check-row"><input type="checkbox" id="es-auto" /> Send the invites automatically</label>
+    <label class="es-check-row"><input type="checkbox" id="es-notify" /> Email me when someone signs or declines, and when everyone is done</label>`;
+  box.querySelector('strong')!.textContent = gmail.address;
+  const auto = $<HTMLInputElement>('es-auto');
+  const note = $<HTMLInputElement>('es-notify');
+  auto.checked = autoSend();
+  note.checked = notifyMe();
+  auto.addEventListener('change', () => {
+    prefs.set('auto-send', auto.checked ? '1' : '0');
+    renderMail();
+  });
+  note.addEventListener('change', () => prefs.set('notify', note.checked ? '1' : '0'));
+  $('es-gmail-off').addEventListener('click', async () => {
+    await fetch('/api/mail/disconnect', { method: 'POST', credentials: 'same-origin' }).catch((): undefined => undefined);
+    gmail.connected = false;
+    gmail.address = '';
+    renderMail();
+    toast('Gmail disconnected');
+  });
+}
+
+function connectGmail(): void {
+  const hint = $<HTMLInputElement>('es-from').value.trim();
+  const w = window.open(`/api/mail/connect${hint ? `?hint=${encodeURIComponent(hint)}` : ''}`, 'paperhaus-gmail', 'width=520,height=680');
+  if (!w) {
+    showAlert('Allow the pop-up', 'Your browser blocked the Google sign-in window. Allow pop-ups for Paperhaus and press Connect Gmail again.');
+    return;
+  }
+  const done = (e: MessageEvent) => {
+    if (e.origin !== location.origin || !e.data || !e.data.paperhausGmail) return;
+    window.removeEventListener('message', done);
+    if (e.data.paperhausGmail === 'connected') {
+      toast(`Connected ${e.data.gmail}`);
+      void loadGmail();
+    }
+  };
+  window.addEventListener('message', done);
+  // Also pick it up if the window closes without a message (some phones).
+  const timer = setInterval(() => {
+    if (w.closed) {
+      clearInterval(timer);
+      setTimeout(() => void loadGmail(), 300);
+    }
+  }, 700);
+}
+
+async function mailPost(path: string, body: unknown): Promise<any> {
+  const r = await fetch(path, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    if (j.error === 'gmail_not_connected') {
+      gmail.connected = false;
+      renderMail();
+    }
+    throw Object.assign(new Error(j.detail || j.error || `HTTP ${r.status}`), { code: j.error });
+  }
+  return j;
+}
+
+/** Tell the server what it needs to email people about this request later. */
+async function mailSetup(s: Sent): Promise<void> {
+  await mailPost('/api/mail/esign', {
+    id: s.id,
+    t: s.senderToken,
+    title: s.title,
+    senderName: s.fromName,
+    notify: notifyMe(),
+    signers: s.signers.map((x, i) => ({ name: x.name, email: x.email, me: isMe(s, i) })),
+  });
+}
+
+function isMe(s: Sent, i: number): boolean {
+  const mine = [identity.email, s.from, gmail.address].filter(Boolean).map((x) => x.toLowerCase());
+  return mine.includes(s.signers[i].email.toLowerCase());
+}
+
+async function sendInvite(s: Sent, i: number): Promise<void> {
+  const m = mail(s, i);
+  await mailPost('/api/mail/send', { to: m.to, subject: m.subject, text: m.body, fromName: s.fromName, esign: { id: s.id, t: s.senderToken, index: i } });
+  s.mailed = s.mailed || new Array(s.signers.length).fill(null);
+  s.mailed[i] = Date.now();
+  await saveSent(s);
+}
+
+/** Send every invite (not the sender's own) through Gmail. Returns how many failed. */
+async function sendAllInvites(s: Sent): Promise<number> {
+  try {
+    await mailSetup(s);
+  } catch (err) {
+    console.warn('Mail setup failed', err);
+    return s.signers.length;
+  }
+  let failed = 0;
+  for (let i = 0; i < s.signers.length; i++) {
+    if (isMe(s, i)) continue;
+    try {
+      await sendInvite(s, i);
+    } catch (err) {
+      console.warn('Invite failed', err);
+      failed++;
+    }
+  }
+  return failed;
 }
 
 // ------------------------------------------------------------------ emailing (from the sender's own account)
@@ -609,8 +773,35 @@ function sendButtons(s: Sent, i: number): HTMLElement {
     <a class="es-btn es-small" href="${escapeHtml(l.app)}"><i class="ph ph-envelope-simple"></i> Email app</a>
     <button class="es-btn es-small" type="button"><i class="ph ph-link"></i> Copy link</button>`;
   wrap.querySelector('button')!.addEventListener('click', () => void copy(signLink(s.id, fromB64(s.key), s.tokens[i])));
-  const meEmail = [identity.email, s.from].map((x) => x.toLowerCase());
-  if (meEmail.includes(s.signers[i].email.toLowerCase())) {
+  if (gmail.connected && !isMe(s, i)) {
+    // Sent through Gmail already, or send it now; the draft buttons stay as other ways.
+    const sentAt = s.mailed && s.mailed[i];
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `es-btn es-small${sentAt ? '' : ' es-primary'}`;
+    b.innerHTML = sentAt ? '<i class="ph ph-arrow-clockwise"></i> Send again' : '<i class="ph ph-paper-plane-tilt"></i> Send';
+    b.addEventListener('click', async () => {
+      b.disabled = true;
+      try {
+        await mailSetup(s);
+        await sendInvite(s, i);
+        toast(`Sent to ${s.signers[i].email}`);
+        status.textContent = `Sent ${formatDate(Date.now(), true)}`;
+        b.innerHTML = '<i class="ph ph-arrow-clockwise"></i> Send again';
+        b.classList.remove('es-primary');
+      } catch (err) {
+        showAlert('Could not send it', String((err as Error).message || err));
+      } finally {
+        b.disabled = false;
+      }
+    });
+    const status = document.createElement('span');
+    status.className = 'es-sent-tag';
+    status.textContent = sentAt ? `Sent ${formatDate(sentAt, true)}` : '';
+    wrap.prepend(status);
+    wrap.prepend(b);
+  }
+  if (isMe(s, i)) {
     const a = document.createElement('a');
     a.className = 'es-btn es-small es-primary';
     a.target = '_blank';
@@ -747,6 +938,24 @@ async function fillSent(item: HTMLElement, s: Sent): Promise<void> {
       <a class="es-btn es-small" target="_blank" rel="noopener" href="${escapeHtml(l.gmail)}"><i class="ph ph-google-logo"></i> Gmail</a>
       <a class="es-btn es-small" target="_blank" rel="noopener" href="${escapeHtml(l.outlook)}"><i class="ph ph-microsoft-outlook-logo"></i> Outlook</a>
       <a class="es-btn es-small" href="${escapeHtml(l.app)}"><i class="ph ph-envelope-simple"></i> Email app</a>`;
+    if (gmail.connected) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'es-btn es-small es-primary';
+      b.innerHTML = '<i class="ph ph-paper-plane-tilt"></i> Send to everyone';
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try {
+          await mailPost('/api/mail/send', { to: s.signers.map((x) => x.email), subject: m.subject, text: m.body, fromName: s.fromName });
+          toast('Sent everyone the signed copy');
+        } catch (err) {
+          showAlert('Could not send it', String((err as Error).message || err));
+        } finally {
+          b.disabled = false;
+        }
+      });
+      btns.prepend(b);
+    }
     row.appendChild(btns);
     signersHost.appendChild(row);
   }
@@ -937,7 +1146,7 @@ function init(): void {
   setMode(asked && modes.includes(asked) ? asked : modes.includes(saved) ? saved : 'meothers', false);
   renderKeep();
   updateCreateHint();
-  void loadIdentity();
+  void loadIdentity().then(loadGmail);
   void renderSent();
 }
 

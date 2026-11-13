@@ -91,6 +91,34 @@ Signing requests are stored, encrypted, in Cloudflare KV, and signers open them 
    These are the signing page, the API it uses (every call needs a token from a signing link) and the app's code and styles, which are open source anyway. Creating a request (`api/esign/new`) still needs a Paperhaus sign-in.
 4. Retry the latest deployment (**Deployments → ... → Retry deployment**) so the binding takes effect.
 
+## 3c. Send signing emails from Gmail (optional, free)
+
+Without this, Paperhaus opens a Gmail draft for each invite and you press Send. With it,
+invites go out on their own from your address, you get an email when someone signs,
+declines or everyone is done, and the next signer gets an "it's your turn" note.
+
+1. Go to console.cloud.google.com and create a project named **Paperhaus**.
+2. **APIs & Services → Library**: search **Gmail API** and press **Enable**.
+3. **Google Auth Platform → Branding** (or **OAuth consent screen**): app name **Paperhaus**,
+   your email as support and developer contact. Audience: **External**.
+4. **Data access → Add or remove scopes**: add `.../auth/gmail.send`. Save.
+5. **Audience → Publish app** (to Production). Leaving it in Testing makes the connection
+   expire every 7 days. Google shows people a "Google hasn't verified this app" screen
+   once when they connect; press **Advanced → Go to Paperhaus**. That is expected for a
+   private app.
+6. **Clients → Create client → Web application**, name **Paperhaus**. Under **Authorized
+   redirect URIs** add `https://paperhaus.pages.dev/api/mail/callback`. Create, then copy
+   the **Client ID** and **Client secret**.
+7. In Cloudflare: **Workers & Pages → paperhaus → Settings → Variables and Secrets → Add**:
+   `GOOGLE_CLIENT_ID` (text) with the client ID, and `GOOGLE_CLIENT_SECRET` (secret) with
+   the client secret, for **Production**. Save, then **Deployments → Retry deployment** on
+   the latest one so the new variables apply.
+8. On the Sign page, press **Connect Gmail** and allow sending. Everyone else who sends
+   requests presses it once for their own Gmail.
+
+The `gmail.send` permission can send email only; it cannot read your mail. You can
+disconnect from the Sign page, or remove Paperhaus at myaccount.google.com/permissions.
+
 ## 4. Put the website on Vercel
 
 1. Sign in at <https://vercel.com> and click **Add New → Project**.
