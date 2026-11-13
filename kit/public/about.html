@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="paperhaus-public" content="1">
+<title>Paperhaus</title>
+<meta name="description" content="Paperhaus is a private PDF toolkit: edit, convert, scan and sign PDFs in your browser, and send documents for signature.">
+<style>
+  :root { color-scheme: light dark; --bg: #fbf1e4; --fg: #3a2a1f; --muted: #6b5646; --accent: #b35a22; --line: #f0e1cd; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1d1712; --fg: #f3e7da; --muted: #c9b5a3; --accent: #f7a86e; --line: #3a2e25; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 42rem; margin: 0 auto; padding: 2.5rem max(16px, env(safe-area-inset-left, 0px)) 3rem max(16px, env(safe-area-inset-right, 0px)); }
+  h1 { font-size: 2rem; letter-spacing: -0.02em; margin: 0 0 0.3rem; }
+  h2 { font-size: 1.15rem; margin: 2rem 0 0.4rem; }
+  p, li { color: var(--fg); }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); }
+  ul { padding-left: 1.2rem; }
+  .btn { display: inline-block; padding: 0.6rem 1.1rem; border-radius: 999px; background: var(--accent); color: #fff; text-decoration: none; font-weight: 600; }
+  @media (prefers-color-scheme: dark) { .btn { color: #1d1712; } }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Paperhaus</h1>
+  <p class="muted">A private PDF toolkit run by Yash Vagal for invited people.</p>
+  <p><a class="btn" href="/">Open Paperhaus</a> <span class="muted">(sign-in for invited people)</span></p>
+
+  <h2>What it does</h2>
+  <ul>
+    <li>Edit, merge, split, compress, convert, redact and password-protect PDFs. These tools run in your browser, so your files are not uploaded.</li>
+    <li>Scan paper documents to PDF with your phone camera.</li>
+    <li>Sign documents yourself, or send them to other people to sign. Each signer gets a private link, every step is recorded in an audit trail, and the finished PDF is sealed so any later change shows.</li>
+  </ul>
+
+  <h2>Sending email with Gmail</h2>
+  <p>When you send a document for signature, Paperhaus can email the signing links for you from your own Gmail address, and email you when people sign. To do that, you connect your Gmail once and allow one permission: <strong>send email on your behalf</strong>. Paperhaus cannot read your mail. You choose which of your connected addresses sends, and you can disconnect at any time.</p>
+  <p>Details are in the <a href="/privacy.html">privacy policy</a>.</p>
+
+  <hr>
+  <p class="muted"><a href="/privacy.html">Privacy policy</a> &middot; <a href="https://github.com/yashvagal/paperhaus">Source code</a></p>
+</main>
+</body>
+</html>

@@ -602,6 +602,9 @@ async function loadGmail(): Promise<void> {
 const autoSend = (): boolean => gmail.connected && prefs.get('auto-send') !== '0';
 const notifyMe = (): boolean => prefs.get('notify') !== '0';
 
+// Set to true once Google has verified the app (no more "hasn't verified" screen).
+const GOOGLE_REVIEWED = false;
+
 function renderMail(): void {
   const box = $('es-mail');
   const fromInput = $<HTMLInputElement>('es-from');
@@ -623,7 +626,7 @@ function renderMail(): void {
       <input id="es-newfrom-email" class="es-input" type="email" placeholder="name@company.com" autocomplete="email" aria-label="Email address to send from" />
       <button id="es-gmail-connect" class="es-btn es-small es-primary" type="button"><i class="ph ph-google-logo"></i> Connect</button>
     </div>
-    <span id="es-newfrom-note" class="es-sub${connected ? ' hidden' : ''}">Type the address (Gmail or Google Workspace) and press Connect. Google asks once to confirm it is yours; after that you just pick it here.</span>
+    <span id="es-newfrom-note" class="es-sub${connected ? ' hidden' : ''}">Type the address (Gmail or Google Workspace) and press Connect. Google asks once to confirm it is yours; after that you just pick it here.${GOOGLE_REVIEWED ? '' : ' Until Google finishes reviewing Paperhaus, it shows <em>Google hasn&#39;t verified this app</em>: click <strong>Advanced</strong>, then <strong>Go to paperhaus.pages.dev</strong>, and tick <strong>Send email on your behalf</strong>.'}</span>
     ${connected ? `<label class="es-check-row"><input type="checkbox" id="es-auto" /> Send the invites automatically</label>
     <label class="es-check-row"><input type="checkbox" id="es-notify" /> Email me when someone signs or declines, and when everyone is done</label>` : ''}`;
 

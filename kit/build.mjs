@@ -568,7 +568,7 @@ function writeHeaders() {
   writeFileSync(join(DIST, 'robots.txt'), 'User-agent: *\nDisallow: /\n');
   // Only the e-sign API runs as a Pages Function. Every other request is served as a
   // plain file, so it never counts toward the free plan's daily Functions requests.
-  writeFileSync(join(DIST, '_routes.json'), JSON.stringify({ version: 1, include: ['/api/*'], exclude: [] }, null, 2) + '\n');
+  writeFileSync(join(DIST, '_routes.json'), JSON.stringify({ version: 1, include: ['/api/*', '/googlecf5f1722fa136511.html'], exclude: [] }, null, 2) + '\n');
 }
 
 // The Paperhaus look. kit/theme/base.css is the shared engine; each direction in
