@@ -6,6 +6,8 @@
 <title>Who can use Paperhaus</title>
 <style>
   .ppl { max-width: 40rem; margin: 0 auto; padding: 2rem max(16px, env(safe-area-inset-left, 0px)) 7rem max(16px, env(safe-area-inset-right, 0px)); color: var(--text, #3a2a1f); font-family: var(--font-body, system-ui, sans-serif); }
+  .ppl .back { margin: 0 0 1rem; }
+  .ppl .back a { color: var(--accent, #b35a22); text-decoration: none; font-weight: 600; }
   .ppl h1 { font-size: 1.9rem; letter-spacing: -0.02em; margin: 0 0 0.3rem; }
   .ppl .sub { color: var(--muted, #937d69); margin: 0 0 1.5rem; }
   .ppl form { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
@@ -28,6 +30,7 @@
 </head>
 <body>
 <main class="ppl">
+  <p class="back"><a href="/">Back to Paperhaus</a></p>
   <h1>Who can use Paperhaus</h1>
   <p class="sub">Add someone's email and they can sign in right away with a one-time code sent to that address.</p>
   <form id="add">
