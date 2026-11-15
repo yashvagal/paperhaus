@@ -16,6 +16,8 @@
  *
  * Behind the Paperhaus sign-in, so Cloudflare Access sets the signed-in email header.
  */
+import { adminEmails } from '../../_shared/admins.js';
+
 const isEmail = (s) => typeof s === 'string' && s.length <= 254 && /^[^\s@<>(),;:"\\]+@[^\s@<>(),;:"\\]+\.[^\s@<>(),;:"\\]+$/.test(s);
 
 export async function onRequest(context) {
@@ -23,14 +25,11 @@ export async function onRequest(context) {
   const action = (Array.isArray(params.path) ? params.path : [params.path])[0] || '';
   const user = (request.headers.get('cf-access-authenticated-user-email') || '').toLowerCase();
   if (!user) return json({ error: 'sign_in_required' }, 401);
-  const admins = String(env.ADMIN_EMAILS || 'yashvagal@gmail.com')
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
+  const admins = adminEmails(env);
   const admin = admins.includes(user);
   const configured = !!(env.CF_API_TOKEN && env.CF_ACCOUNT_ID && env.CF_ACCESS_POLICY_ID);
 
-  if (request.method === 'GET' && action === 'me') return json({ admin, configured });
+  if (request.method === 'GET' && action === 'me') return json({ admin });
   if (!admin) return json({ error: 'not_allowed' }, 403);
   if (!configured) return json({ error: 'not_configured' }, 503);
 
