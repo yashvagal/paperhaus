@@ -220,7 +220,7 @@ emails on the Access policy "Paperhaus friends" through the Cloudflare API.
 
 ### 3e. File sync across devices (nothing to set up)
 
-"Sync across your devices" under Recent on the home page is off until each person turns it on.
+"Sync across your devices" under Recent on the home page is on for everyone unless they turn it off.
 It uses the same `ESIGN` KV namespace as signing (keys `fo:`, `fi:`, `fb:` and `k:files-master`),
 so there are no new variables. Files are encrypted in the browser with a per-account key; each
 account keeps its newest 12 files, up to 24 MB each and 150 MB in total. Code:

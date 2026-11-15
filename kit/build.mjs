@@ -627,7 +627,7 @@ const HOME_TASKS = [
 function homeMarkup(env) {
   const eyebrow = escapeHtml((env.BRAND_NAME || 'paperhaus').toLowerCase());
   const title = withEm(env.HOME_TITLE || 'What are we *working on?*');
-  const note = escapeHtml(env.HOME_NOTE || 'Nothing is uploaded or stored');
+  const note = escapeHtml(env.HOME_NOTE || 'Tools run on your device. Recent files sync encrypted');
   const tasks = HOME_TASKS.map(([href, icon, name, sub], i) =>
     `<a class="ph-task" href="${href}" style="--c:var(--c${(i % 6) + 1});--i:var(--i${(i % 6) + 1})">` +
     `<span class="ph-task-icon"><i class="ph ${icon}" aria-hidden="true"></i></span>` +
@@ -892,7 +892,7 @@ function brandWebApp(env, bg) {
     id: '/',
     name: env.BRAND_NAME,
     short_name: env.BRAND_NAME,
-    description: 'Private document tools that run in your browser. Nothing is uploaded or stored.',
+    description: 'Private document tools that run in your browser.',
     start_url: '/',
     scope: '/',
     display: 'standalone',

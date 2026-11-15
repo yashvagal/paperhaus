@@ -305,7 +305,7 @@
     text.appendChild(
       el('span', '', on
         ? 'Your newest 12 files (up to 24 MB each) follow your sign-in. They are encrypted before they leave this device.'
-        : 'See these files on your phone and computer. Encrypted before upload, kept for your account only.')
+        : 'Sync is off, so these files stay on this device. Turn it on to see them on your phone and computer.')
     );
     box.appendChild(text);
     var btn = el('button', on ? 'ph-sync-btn' : 'ph-sync-btn ph-sync-btn-on', on ? 'Turn off' : 'Turn on');
@@ -438,5 +438,15 @@
   }
   window.addEventListener('pageshow', function (e) {
     if (e.persisted) renderRecent();
+  });
+  // Coming back to the tab (say after saving something on the phone) picks up new synced files.
+  var lastCheck = Date.now();
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState !== 'visible' || !flow || !flow.syncStatus || Date.now() - lastCheck < 15000) return;
+    lastCheck = Date.now();
+    flow.syncStatus(true).then(function () {
+      renderRecent();
+      if (flow.syncCached()) flow.catchUp().then(function () {}, function () {});
+    });
   });
 })();

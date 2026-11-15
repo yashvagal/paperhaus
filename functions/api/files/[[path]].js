@@ -4,6 +4,8 @@
  *   GET    /api/files/key   { key }  this account's file key (base64, AES-256-GCM)
  *   GET    /api/files       { on, files: [{ id, at, size, meta }] }  newest first
  *   PUT    /api/files/settings  { on }  turn sync on or off for the account (off forgets the files)
+ *
+ * Sync is on by default for every account; it is off only after the person turns it off.
  *   PUT    /api/files/:id   body: encrypted file; header x-ph-meta: encrypted name/type/tool
  *   GET    /api/files/:id   the encrypted file
  *   DELETE /api/files/:id   forget one file
@@ -38,17 +40,17 @@ export async function onRequest(context) {
     if (id === 'settings') {
       if (m !== 'PUT') return json({ error: 'not_found' }, 404);
       const body = await request.json().catch(() => ({}));
-      if (body.on) await env.ESIGN.put(onKey(uh), '1');
+      if (body.on) await env.ESIGN.delete(onKey(uh));
       else {
         await forgetAll(env, uh);
-        await env.ESIGN.delete(onKey(uh));
+        await env.ESIGN.put(onKey(uh), '0');
       }
       return json({ on: !!body.on });
     }
     if (!id) {
       if (m === 'GET') {
-        const [on, files] = await Promise.all([env.ESIGN.get(onKey(uh)), getIndex(env, uh)]);
-        return json({ on: !!on, files });
+        const [off, files] = await Promise.all([isOff(env, uh), getIndex(env, uh)]);
+        return json({ on: !off, files });
       }
       if (m === 'DELETE') return json({ ok: true, removed: await forgetAll(env, uh) });
       return json({ error: 'not_found' }, 404);
@@ -61,7 +63,7 @@ export async function onRequest(context) {
       return new Response(data, { headers: { 'content-type': 'application/octet-stream', 'cache-control': 'private, no-store' } });
     }
     if (m === 'PUT') {
-      if (!(await env.ESIGN.get(onKey(uh)))) return json({ error: 'sync_off' }, 409);
+      if (await isOff(env, uh)) return json({ error: 'sync_off' }, 409);
       const meta = String(request.headers.get('x-ph-meta') || '');
       const at = Number(request.headers.get('x-ph-at')) || Date.now();
       if (!meta || meta.length > 4000) return json({ error: 'bad_meta' }, 400);
@@ -103,6 +105,10 @@ const blobKey = (uh, id) => `fb:${uh}:${id}`;
 async function getIndex(env, uh) {
   const list = await env.ESIGN.get(indexKey(uh), 'json');
   return Array.isArray(list) ? list : [];
+}
+
+async function isOff(env, uh) {
+  return (await env.ESIGN.get(onKey(uh))) === '0';
 }
 
 async function forgetAll(env, uh) {

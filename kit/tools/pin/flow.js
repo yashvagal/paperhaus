@@ -9,7 +9,7 @@
  * address carries ?ph-file=<id>, and the file is put into the page's file picker.
  * Sync (opt-in, per account): when it is on, each saved file is also encrypted here with the
  * account's key (AES-GCM) and uploaded to /api/files, so it shows up in Recent on every device
- * the person signs in to. Off by default; turning it off removes the synced copies.
+ * the person signs in to. On by default; turning it off removes the synced copies.
  * Runs on every app page; plain script, no build step.
  */
 (function () {
@@ -135,9 +135,9 @@
 
   function syncCached() {
     try {
-      return localStorage.getItem('ph-sync-on') === '1';
+      return localStorage.getItem('ph-sync-on') !== '0';
     } catch (e) {
-      return false;
+      return true;
     }
   }
   function remember(on) {
