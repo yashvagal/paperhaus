@@ -11,6 +11,11 @@
  *   DELETE /api/files/:id   forget one file
  *   DELETE /api/files       forget all of this account's synced files
  *
+ *   Small records (encrypted the same way), so lists like "Sent for signing" follow the account:
+ *   GET    /api/files/rec/:kind       { items: [{ id, at, data } or { id, at, gone }] }
+ *   PUT    /api/files/rec/:kind/:id   { at, data }
+ *   DELETE /api/files/rec/:kind/:id
+ *
  * Files and their names are encrypted in the browser with the account's key before they
  * are uploaded, and decrypted there after download. The key is derived on the server from a
  * random master key kept in KV (k:files-master), so it follows the account to any device;
@@ -23,6 +28,9 @@
 const MAX_FILES = 12;
 const MAX_FILE_BYTES = 24 * 1024 * 1024;
 const MAX_BYTES = 150 * 1024 * 1024;
+const RECORD_KINDS = ['sent'];
+const MAX_RECORDS = 200;
+const MAX_RECORD = 16000;
 const enc = new TextEncoder();
 
 export async function onRequest(context) {
@@ -37,6 +45,34 @@ export async function onRequest(context) {
 
   try {
     if (m === 'GET' && id === 'key') return json({ key: await accountKey(env, user) });
+    if (id === 'rec') {
+      const kind = parts[1] || '';
+      const rid = parts[2] || '';
+      if (!RECORD_KINDS.includes(kind)) return json({ error: 'not_found' }, 404);
+      const items = await getRecords(env, uh, kind);
+      if (m === 'GET' && !rid) return json({ items });
+      if (!/^[A-Za-z0-9_-]{6,64}$/.test(rid)) return json({ error: 'bad_id' }, 400);
+      if (m === 'PUT') {
+        if (await isOff(env, uh)) return json({ error: 'sync_off' }, 409);
+        const body = await request.json().catch(() => ({}));
+        const data = String(body.data || '');
+        if (!data || data.length > MAX_RECORD) return json({ error: 'bad_data' }, 400);
+        if (items.some((r) => r.id === rid && r.gone)) return json({ ok: true, gone: true });
+        const next = items.filter((r) => r.id !== rid);
+        next.unshift({ id: rid, at: Number(body.at) || Date.now(), data });
+        next.sort((a, b) => b.at - a.at);
+        await env.ESIGN.put(recKey(uh, kind), JSON.stringify(next.slice(0, MAX_RECORDS)));
+        return json({ ok: true });
+      }
+      if (m === 'DELETE') {
+        // Keep a marker so other devices delete their copy too and don't send it back.
+        const next = items.filter((r) => r.id !== rid);
+        next.unshift({ id: rid, at: Date.now(), gone: true });
+        await env.ESIGN.put(recKey(uh, kind), JSON.stringify(next.slice(0, MAX_RECORDS)));
+        return json({ ok: true });
+      }
+      return json({ error: 'not_found' }, 404);
+    }
     if (id === 'settings') {
       if (m !== 'PUT') return json({ error: 'not_found' }, 404);
       const body = await request.json().catch(() => ({}));
@@ -99,6 +135,12 @@ export async function onRequest(context) {
 }
 
 const onKey = (uh) => `fo:${uh}`;
+const recKey = (uh, kind) => `fr:${uh}:${kind}`;
+
+async function getRecords(env, uh, kind) {
+  const list = await env.ESIGN.get(recKey(uh, kind), 'json');
+  return Array.isArray(list) ? list : [];
+}
 const indexKey = (uh) => `fi:${uh}`;
 const blobKey = (uh, id) => `fb:${uh}:${id}`;
 
@@ -115,6 +157,7 @@ async function forgetAll(env, uh) {
   const files = await getIndex(env, uh);
   await Promise.all(files.map((f) => env.ESIGN.delete(blobKey(uh, f.id))));
   if (files.length) await env.ESIGN.delete(indexKey(uh));
+  await Promise.all(RECORD_KINDS.map((k) => env.ESIGN.delete(recKey(uh, k))));
   return files.length;
 }
 

@@ -96,7 +96,26 @@ function db(): Promise<IDBDatabase> {
     r.onerror = () => reject(r.error);
   });
 }
+// Sent requests also follow the person's account (encrypted, via flow.js) when sync is on,
+// so the status shows on their phone too.
+interface FlowRecords {
+  putRecord(kind: string, id: string, obj: unknown): Promise<boolean>;
+  deleteRecord(kind: string, id: string): Promise<boolean>;
+  listRecords(kind: string): Promise<unknown[]>;
+}
+async function flowApi(): Promise<FlowRecords | null> {
+  for (let i = 0; i < 30; i++) {
+    const f = (window as unknown as { paperhausFlow?: FlowRecords }).paperhausFlow;
+    if (f && f.listRecords) return f;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return null;
+}
 async function saveSent(s: Sent): Promise<void> {
+  await saveLocal(s);
+  void flowApi().then((f) => f && f.putRecord('sent', s.id, s).catch(() => false));
+}
+async function saveLocal(s: Sent): Promise<void> {
   const d = await db();
   await new Promise<void>((res, rej) => {
     const tx = d.transaction('sent', 'readwrite');
@@ -106,12 +125,37 @@ async function saveSent(s: Sent): Promise<void> {
   });
 }
 async function deleteSent(id: string): Promise<void> {
+  void flowApi().then((f) => f && f.deleteRecord('sent', id).catch(() => false));
+  await deleteLocal(id);
+}
+async function deleteLocal(id: string): Promise<void> {
   const d = await db();
   await new Promise<void>((res) => {
     const tx = d.transaction('sent', 'readwrite');
     tx.objectStore('sent').delete(id);
     tx.oncomplete = () => res();
   });
+}
+/** Pull requests sent from the person's other devices into this browser. */
+async function pullSent(): Promise<void> {
+  const f = await flowApi();
+  if (!f) return;
+  const remote = (await f.listRecords('sent').catch((): unknown[] => [])) as (Sent & { gone?: boolean })[];
+  if (!remote.length) return;
+  const have = new Map((await listSent()).map((s) => [s.id, s]));
+  for (const r of remote) {
+    if (r && r.gone) {
+      if (have.has(r.id)) await deleteLocal(r.id);
+      continue;
+    }
+    if (!r || !r.id || !r.key || !r.senderToken) continue;
+    const mine = have.get(r.id);
+    if (!mine) await saveLocal(r);
+    else if (r.mailed && JSON.stringify(r.mailed) !== JSON.stringify(mine.mailed)) {
+      const mailed = (mine.mailed || r.mailed).map((v, i) => Math.max(v || 0, (r.mailed && r.mailed[i]) || 0) || null);
+      await saveLocal({ ...mine, mailed });
+    }
+  }
 }
 async function listSent(): Promise<Sent[]> {
   const d = await db();
@@ -902,7 +946,15 @@ function showReady(s: Sent): void {
 
 // ------------------------------------------------------------------ sent requests
 
+let pulled = false;
 async function renderSent(): Promise<void> {
+  if (!pulled) {
+    pulled = true;
+    void pullSent().then(
+      (): Promise<void> => renderSent(),
+      (): void => undefined
+    );
+  }
   const list = (await listSent()).filter((s) => (s.retainUntil || s.expires) > Date.now());
   $('es-sent').classList.toggle('hidden', !list.length);
   const host = $('es-sent-list');
@@ -1205,7 +1257,10 @@ function init(): void {
   });
   $('es-create').addEventListener('click', () => void create());
   $('es-new').addEventListener('click', resetDraft);
-  $('es-refresh').addEventListener('click', () => void renderSent());
+  $('es-refresh').addEventListener('click', () => {
+    pulled = false;
+    void renderSent();
+  });
   let resizeTimer = 0;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);

@@ -225,11 +225,106 @@
     });
   }
 
+  // Small encrypted records that follow the account (the Sign page's "Sent for signing" list).
+  function putRecord(kind, id, obj) {
+    if (!syncCached()) return Promise.resolve(false);
+    return seal(enc.encode(JSON.stringify(obj))).then(function (ct) {
+      return api('/rec/' + kind + '/' + id, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ at: obj.createdAt || Date.now(), data: b64(ct) }),
+      }).then(function () {
+        return true;
+      });
+    });
+  }
+  function deleteRecord(kind, id) {
+    if (!syncCached()) return Promise.resolve(false);
+    return api('/rec/' + kind + '/' + id, { method: 'DELETE' }).then(function () {
+      return true;
+    });
+  }
+  function listRecords(kind) {
+    if (!syncCached()) return Promise.resolve([]);
+    return api('/rec/' + kind)
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (j) {
+        return Promise.all(
+          (j.items || []).map(function (it) {
+            if (it.gone) return { id: it.id, gone: true };
+            return unseal(unb64(it.data))
+              .then(function (plain) {
+                return JSON.parse(dec.decode(plain));
+              })
+              .catch(function () {
+                return null;
+              });
+          })
+        );
+      })
+      .then(function (all) {
+        return all.filter(Boolean);
+      });
+  }
+
+  /** Signing requests sent from this browser (the Sign page keeps them in IndexedDB). */
+  function localSent() {
+    return new Promise(function (resolve) {
+      var req;
+      try {
+        req = indexedDB.open('paperhaus-esign', 1);
+      } catch (e) {
+        return resolve([]);
+      }
+      req.onupgradeneeded = function () {
+        req.result.createObjectStore('sent', { keyPath: 'id' });
+      };
+      req.onerror = function () {
+        resolve([]);
+      };
+      req.onsuccess = function () {
+        try {
+          var g = req.result.transaction('sent').objectStore('sent').getAll();
+          g.onsuccess = function () {
+            resolve(g.result || []);
+          };
+          g.onerror = function () {
+            resolve([]);
+          };
+        } catch (e) {
+          resolve([]);
+        }
+      };
+    });
+  }
+
+  /** Send signing requests made here that the account does not have yet. */
+  function catchUpSent() {
+    return Promise.all([localSent(), api('/rec/sent').then(function (r) { return r.json(); })]).then(function (both) {
+      var there = {};
+      (both[1].items || []).forEach(function (it) {
+        there[it.id] = 1;
+      });
+      var now = Date.now();
+      var todo = both[0].filter(function (s) {
+        return s && s.id && !there[s.id] && (s.retainUntil || s.expires || 0) > now;
+      });
+      return todo.reduce(function (p, s) {
+        return p.then(function () {
+          return putRecord('sent', s.id, s).catch(function () {});
+        });
+      }, Promise.resolve());
+    });
+  }
+
   /** Send files saved here that did not finish uploading (say the page closed mid-upload). */
   function catchUp() {
     if (!syncCached()) return Promise.resolve();
     return syncStatus().then(function (st) {
       if (!st.on || st.offline) return;
+      catchUpSent().catch(function () {});
       var there = {};
       var oldest = Infinity;
       st.files.forEach(function (f) {
@@ -668,6 +763,9 @@
     syncCached: syncCached,
     setSync: setSync,
     catchUp: catchUp,
+    putRecord: putRecord,
+    deleteRecord: deleteRecord,
+    listRecords: listRecords,
     syncLimit: SYNC_LIMIT,
   };
 
