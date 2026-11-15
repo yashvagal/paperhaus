@@ -245,6 +245,14 @@
         });
         menu.appendChild(pinItem);
       }
+      // The owner manages who can sign in (people.html); shown only when the server says so.
+      var peopleItem = el('a', { href: '/people', role: 'menuitem', class: 'ph-menu-item', hidden: '' },
+        '<i class="ph ph-users-three" aria-hidden="true"></i> Who can use Paperhaus');
+      menu.appendChild(peopleItem);
+      fetch('/api/admin/me', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : {}; })
+        .then(function (j) { if (j && j.admin) peopleItem.removeAttribute('hidden'); })
+        .catch(function () {});
       // Recent files live only in this browser (flow.js); this empties that list.
       if (window.paperhausFlow) {
         var clear = el('button', { type: 'button', role: 'menuitem', class: 'ph-menu-item' },

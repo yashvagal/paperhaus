@@ -93,6 +93,9 @@
   font-size: 0.85rem;
   word-break: break-all;
 }
+.ph-menu-item[hidden] {
+  display: none;
+}
 .ph-menu-item {
   display: flex;
   align-items: center;

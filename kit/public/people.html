@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Who can use Paperhaus</title>
+<style>
+  .ppl { max-width: 40rem; margin: 0 auto; padding: 2rem max(16px, env(safe-area-inset-left, 0px)) 7rem max(16px, env(safe-area-inset-right, 0px)); color: var(--text, #3a2a1f); font-family: var(--font-body, system-ui, sans-serif); }
+  .ppl h1 { font-size: 1.9rem; letter-spacing: -0.02em; margin: 0 0 0.3rem; }
+  .ppl .sub { color: var(--muted, #937d69); margin: 0 0 1.5rem; }
+  .ppl form { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+  .ppl input { flex: 1 1 15rem; min-width: 0; padding: 0.75rem 0.9rem; border-radius: 12px; border: 1px solid var(--line-strong, #e6d1b6); background: var(--surface, #fff); color: inherit; font: inherit; }
+  .ppl button { cursor: pointer; border: 0; border-radius: 999px; padding: 0.7rem 1.2rem; font: inherit; font-weight: 600; background: var(--btn-grad, #f7a86e); color: var(--btn-text, #3a2a1f); }
+  .ppl button[disabled] { opacity: 0.6; cursor: default; }
+  .ppl .msg { min-height: 1.4rem; font-size: 0.92rem; color: var(--muted, #937d69); margin: 0.2rem 0 1.2rem; }
+  .ppl .msg.bad { color: var(--bad, #b23b2c); }
+  .ppl .msg.good { color: var(--good, #2f7a52); }
+  .ppl ul { list-style: none; padding: 0; margin: 0; border: 1px solid var(--line, #f0e1cd); border-radius: 16px; overflow: hidden; background: var(--surface, #fff); }
+  .ppl li { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.75rem 1rem; border-top: 1px solid var(--line, #f0e1cd); }
+  .ppl li:first-child { border-top: 0; }
+  .ppl li span { min-width: 0; overflow-wrap: anywhere; }
+  .ppl li .you { color: var(--muted, #937d69); font-size: 0.85rem; }
+  .ppl .rm { background: transparent; color: var(--bad, #b23b2c); padding: 0.35rem 0.6rem; font-weight: 600; }
+  .ppl .rm.sure { background: var(--bad-soft, #fde4df); }
+  .ppl .count { color: var(--muted, #937d69); font-size: 0.9rem; margin: 1.6rem 0 0.5rem; }
+  .ppl .note { color: var(--muted, #937d69); font-size: 0.9rem; margin-top: 1.4rem; }
+</style>
+</head>
+<body>
+<main class="ppl">
+  <h1>Who can use Paperhaus</h1>
+  <p class="sub">Add someone's email and they can sign in right away with a one-time code sent to that address.</p>
+  <form id="add">
+    <input id="email" type="email" inputmode="email" autocomplete="off" placeholder="name@example.com" aria-label="Email to invite" required>
+    <button id="addbtn" type="submit">Add</button>
+  </form>
+  <p class="msg" id="msg" role="status"></p>
+  <p class="count" id="count"></p>
+  <ul id="list"><li><span>Loading...</span></li></ul>
+  <p class="note">Removing someone stops new sign-ins. Anyone already signed in keeps access until their session ends (up to a month).</p>
+</main>
+<script src="/people.js" defer></script>
+</body>
+</html>

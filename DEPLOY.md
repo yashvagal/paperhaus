@@ -203,3 +203,17 @@ Cloudflare shows its own sign-in screen before the app. Make it look like Paperh
 - **A friend gets no code:** check their email is in the `Paperhaus` policy exactly as they type it.
 - **Open Paperhaus goes to the wrong place:** check `website/config.js` has the app's address with `https://` and no slash at the end.
 - **No About Paperhaus in the app's menu:** check `SITE_URL` in `kit/kit.env` starts with `https://`, then push to rebuild.
+
+### 3d. Let the owner manage who can sign in (optional)
+
+The page **Who can use Paperhaus** (account menu, owner only, `/people`) adds and removes
+emails on the Access policy "Paperhaus friends" through the Cloudflare API.
+
+1. Cloudflare, **My Profile > API Tokens > Create Token > Create Custom Token**. Name it
+   "Paperhaus invites". Permissions: **Account > Access: Apps and Policies > Edit**. Account
+   resources: your account only. Create it and copy it.
+2. **Workers & Pages > paperhaus > Settings > Variables and Secrets** (Production):
+   `CF_API_TOKEN` (type **Secret**, the token), `CF_ACCOUNT_ID` (text, the account ID),
+   `CF_ACCESS_POLICY_ID` (text, the ID of "Paperhaus friends"). Optional: `ADMIN_EMAILS`,
+   comma-separated owners (default yashvagal@gmail.com).
+3. Retry the latest deployment so the variables take effect.
