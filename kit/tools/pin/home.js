@@ -248,7 +248,7 @@
         if (!recs.length) {
           host.appendChild(
             el('p', 'ph-muted', syncOn
-              ? 'Files you make here show up on every device you sign in to, so you can keep working on them.'
+              ? 'Nothing here yet. Files you save on any device show up here. Files already in Recent on your other devices upload the next time you open Paperhaus there.'
               : 'Files you make here show up on this device, so you can keep working on them. Nothing is uploaded.')
           );
         }
@@ -321,6 +321,29 @@
         : 'Sync is off, so these files stay on this device. Turn it on to see them on your phone and computer.')
     );
     box.appendChild(text);
+    if (on && flow.syncStatus) {
+      var state = el('span', 'ph-sync-state', 'Checking your account...');
+      text.appendChild(state);
+      flow.syncStatus().then(function (st) {
+        if (st.offline) {
+          state.textContent = "Can't reach your synced files right now. Reload the page (you may need to sign in again).";
+          state.classList.add('ph-sync-bad');
+          return;
+        }
+        var n = st.files.length;
+        state.textContent = (n ? n + (n === 1 ? ' file' : ' files') + ' in your account' : 'No files in your account yet') + ' · checked ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        var again = el('button', 'ph-linkbtn ph-sync-again', 'Check now');
+        again.type = 'button';
+        again.addEventListener('click', function () {
+          again.disabled = true;
+          flow.syncStatus(true).then(function () {
+            return flow.catchUp();
+          }).then(renderRecent, renderRecent);
+        });
+        state.appendChild(document.createTextNode(' '));
+        state.appendChild(again);
+      });
+    }
     var btn = el('button', on ? 'ph-sync-btn' : 'ph-sync-btn ph-sync-btn-on', on ? 'Turn off' : 'Turn on');
     btn.type = 'button';
     var sure = false;

@@ -375,6 +375,17 @@
   font-size: 0.78rem;
   color: var(--muted, #9ca3af);
 }
+.ph-sync-text .ph-sync-state {
+  margin-top: 0.25rem;
+  font-size: 0.76rem;
+}
+.ph-sync-text .ph-sync-bad {
+  color: var(--bad, #f87171);
+}
+.ph-sync-again {
+  font-size: 0.76rem;
+  padding: 0;
+}
 .ph-sync-btn {
   min-height: 2.4rem;
   padding: 0 1rem;

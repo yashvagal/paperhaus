@@ -674,6 +674,20 @@
   function start() {
     tabbar();
     receive();
+    // On any Paperhaus page, send files saved here that are not in the account yet (once a minute).
+    // The home page does its own check, so it is skipped there.
+    if (/^\/(index(\.html)?)?$/.test(location.pathname) || !syncCached()) return;
+    var last = 0;
+    try {
+      last = Number(sessionStorage.getItem('ph-sync-check')) || 0;
+      if (Date.now() - last < 60000) return;
+      sessionStorage.setItem('ph-sync-check', String(Date.now()));
+    } catch (e) {
+      /* fine */
+    }
+    setTimeout(function () {
+      catchUp().catch(function () {});
+    }, 2500);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
