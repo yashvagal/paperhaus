@@ -652,7 +652,7 @@ function homeMarkup(env) {
     `<div class="ph-sec-head"><h2>Or pick a task</h2><a id="ph-all-link" href="#all-tools">See all tools</a></div>` +
     `<div class="ph-tasks">${tasks}</div>` +
     `<div class="ph-lists">` +
-    `<div class="ph-card" id="ph-recent"><div class="ph-card-head"><h2>Recent on this device</h2><span>Only you see these</span></div><div id="ph-recent-list"></div></div>` +
+    `<div class="ph-card" id="ph-recent"><div class="ph-card-head"><h2>Recent files</h2><span>On all your devices</span></div><div id="ph-recent-list"></div></div>` +
     `<div class="ph-card" id="ph-pins"><div class="ph-card-head"><h2>Pinned tools</h2><span>Star a tool to pin it</span></div><div id="ph-pins-list" class="ph-pins-list"></div>` +
     `<p class="ph-card-foot">Everything you open, convert or sign is processed in this browser. Signing requests are encrypted before they leave it.</p></div>` +
     `</div></section>` +

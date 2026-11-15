@@ -617,6 +617,17 @@
   function tabbar() {
     // Normally already in the page (written in at build time); made here only as a fallback.
     if (!document.querySelector('.ph-tabbar')) makeTabbar();
+    // On the home page, light up Recent or Tools when the page is scrolled to them by the tab.
+    function mark() {
+      if (!/^\/(index(\.html)?)?$/.test(location.pathname)) return;
+      var want = location.hash === '#ph-recent' ? '/#ph-recent' : location.hash === '#all-tools' ? '/#all-tools' : '/';
+      document.querySelectorAll('.ph-tabbar a').forEach(function (a) {
+        if (a.getAttribute('href') === want) a.setAttribute('aria-current', 'page');
+        else a.removeAttribute('aria-current');
+      });
+    }
+    mark();
+    window.addEventListener('hashchange', mark);
     // Out of the way while typing, so it does not ride on top of the phone keyboard.
     document.addEventListener('focusin', function (e) {
       if (e.target && e.target.matches && e.target.matches('input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]), textarea, select, [contenteditable="true"]')) {

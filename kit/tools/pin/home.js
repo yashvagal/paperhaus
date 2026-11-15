@@ -233,6 +233,7 @@
 
   // ---------------------------------------------------------------- recent files
 
+  var showAll = false;
   function renderRecent() {
     var host = $('#ph-recent-list');
     if (!flow) return;
@@ -240,11 +241,9 @@
     heading(syncOn);
     (flow.listAll || flow.list)()
       .then(function (all) {
-        var recs = all
-          .filter(function (r) {
-            return r.kept;
-          })
-          .slice(0, 6);
+        var recs = all.filter(function (r) {
+          return r.kept;
+        });
         host.textContent = '';
         if (!recs.length) {
           host.appendChild(
@@ -253,8 +252,10 @@
               : 'Files you make here show up on this device, so you can keep working on them. Nothing is uploaded.')
           );
         }
-        recs.forEach(function (r) {
+        var SHOW = 5;
+        recs.forEach(function (r, i) {
           var row = el('div', 'ph-recent-row');
+          if (i >= SHOW && !showAll) row.hidden = true;
           row.appendChild(el('span', 'ph-filebadge', (ext(r.name) || 'file').slice(0, 4).toUpperCase()));
           var info = el('div', 'ph-recent-info');
           info.appendChild(el('strong', '', r.name));
@@ -280,6 +281,18 @@
           row.appendChild(open);
           host.appendChild(row);
         });
+        if (recs.length > SHOW && !showAll) {
+          var more = el('button', 'ph-linkbtn ph-recent-more', 'Show all ' + recs.length + ' files');
+          more.type = 'button';
+          more.addEventListener('click', function () {
+            showAll = true;
+            host.querySelectorAll('.ph-recent-row[hidden]').forEach(function (r) {
+              r.hidden = false;
+            });
+            more.remove();
+          });
+          host.appendChild(more);
+        }
         syncRow(host);
       })
       .catch(function () {
