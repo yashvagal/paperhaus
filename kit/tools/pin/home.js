@@ -236,41 +236,101 @@
   function renderRecent() {
     var host = $('#ph-recent-list');
     if (!flow) return;
-    flow
-      .list()
+    var syncOn = flow.syncCached();
+    heading(syncOn);
+    (flow.listAll || flow.list)()
       .then(function (all) {
         var recs = all
           .filter(function (r) {
             return r.kept;
           })
-          .slice(0, 5);
+          .slice(0, 6);
         host.textContent = '';
         if (!recs.length) {
-          host.appendChild(el('p', 'ph-muted', 'Files you make here show up on this device, so you can keep working on them. Nothing is uploaded.'));
-          return;
+          host.appendChild(
+            el('p', 'ph-muted', syncOn
+              ? 'Files you make here show up on every device you sign in to, so you can keep working on them.'
+              : 'Files you make here show up on this device, so you can keep working on them. Nothing is uploaded.')
+          );
         }
         recs.forEach(function (r) {
           var row = el('div', 'ph-recent-row');
           row.appendChild(el('span', 'ph-filebadge', (ext(r.name) || 'file').slice(0, 4).toUpperCase()));
           var info = el('div', 'ph-recent-info');
           info.appendChild(el('strong', '', r.name));
-          info.appendChild(el('span', '', (r.tool ? r.tool + ' · ' : '') + when(r.at)));
+          info.appendChild(el('span', '', (r.tool ? r.tool + ' · ' : '') + when(r.at) + (r.remote ? ' · synced' : '')));
           row.appendChild(info);
           var open = el('button', 'ph-linkbtn', 'Open');
           open.type = 'button';
           open.addEventListener('click', function () {
-            var f = new File([r.blob], r.name, { type: r.type });
-            offer([f], [r]);
-            window.scrollTo({ top: home.getBoundingClientRect().top + window.scrollY - 80, behavior: 'smooth' });
+            var got = r.blob ? Promise.resolve(r) : (open.textContent = 'Opening...', open.disabled = true, flow.getAny(r.id));
+            got.then(function (rec) {
+              open.textContent = 'Open';
+              open.disabled = false;
+              if (!rec || !rec.blob) {
+                open.textContent = 'Not available';
+                return;
+              }
+              r.blob = rec.blob;
+              var f = new File([rec.blob], rec.name, { type: rec.type });
+              offer([f], [rec]);
+              window.scrollTo({ top: home.getBoundingClientRect().top + window.scrollY - 80, behavior: 'smooth' });
+            });
           });
           row.appendChild(open);
           host.appendChild(row);
         });
+        syncRow(host);
       })
       .catch(function () {
         host.textContent = '';
         host.appendChild(el('p', 'ph-muted', 'Recent files are not available in this browser window.'));
       });
+  }
+
+  function heading(on) {
+    var h = document.querySelector('#ph-recent .ph-card-head h2');
+    var sub = document.querySelector('#ph-recent .ph-card-head span');
+    if (h) h.textContent = on ? 'Recent files' : 'Recent on this device';
+    if (sub) sub.textContent = on ? 'On all your devices' : 'Only you see these';
+  }
+
+  /** The switch under Recent: sync these files across the person's devices. */
+  function syncRow(host) {
+    if (!flow.setSync) return;
+    var on = flow.syncCached();
+    var box = el('div', 'ph-sync');
+    var text = el('div', 'ph-sync-text');
+    text.appendChild(el('strong', '', on ? 'Syncing across your devices' : 'Sync across your devices'));
+    text.appendChild(
+      el('span', '', on
+        ? 'Your newest 12 files (up to 24 MB each) follow your sign-in. They are encrypted before they leave this device.'
+        : 'See these files on your phone and computer. Encrypted before upload, kept for your account only.')
+    );
+    box.appendChild(text);
+    var btn = el('button', on ? 'ph-sync-btn' : 'ph-sync-btn ph-sync-btn-on', on ? 'Turn off' : 'Turn on');
+    btn.type = 'button';
+    var sure = false;
+    btn.addEventListener('click', function () {
+      if (on && !sure) {
+        sure = true;
+        btn.textContent = 'Turn off and remove synced copies';
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = on ? 'Turning off...' : 'Turning on...';
+      flow
+        .setSync(!on)
+        .then(function () {
+          renderRecent();
+        })
+        .catch(function () {
+          btn.disabled = false;
+          btn.textContent = 'Could not reach Paperhaus. Try again';
+        });
+    });
+    box.appendChild(btn);
+    host.appendChild(box);
   }
 
   // ---------------------------------------------------------------- pinned tools (the tool list's stars)
@@ -368,6 +428,14 @@
   });
 
   renderRecent();
+  // Check the account's sync setting (it may have been turned on from another device).
+  if (flow && flow.syncStatus) {
+    var was = flow.syncCached();
+    flow.syncStatus(true).then(function (st) {
+      if (st.on !== was || (st.on && st.files.length)) renderRecent();
+      if (st.on) flow.catchUp().then(function () {}, function () {});
+    });
+  }
   window.addEventListener('pageshow', function (e) {
     if (e.persisted) renderRecent();
   });

@@ -253,7 +253,7 @@
         .then(function (r) { return r.ok ? r.json() : {}; })
         .then(function (j) { if (j && j.admin) peopleItem.removeAttribute('hidden'); })
         .catch(function () {});
-      // Recent files live only in this browser (flow.js); this empties that list.
+      // Recent files live in this browser (flow.js), and in the account when sync is on; this empties both.
       if (window.paperhausFlow) {
         var clear = el('button', { type: 'button', role: 'menuitem', class: 'ph-menu-item' },
           '<i class="ph ph-broom" aria-hidden="true"></i> Clear recent files');
@@ -261,7 +261,7 @@
           window.paperhausFlow.clear().then(function () {
             clear.innerHTML = '<i class="ph ph-check" aria-hidden="true"></i> Recent files cleared';
             var list = document.getElementById('ph-recent-list');
-            if (list) list.innerHTML = '<p class="ph-muted">Files you make here show up on this device, so you can keep working on them. Nothing is uploaded.</p>';
+            if (list) location.reload();
           });
         });
         menu.appendChild(clear);

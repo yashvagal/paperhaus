@@ -349,6 +349,53 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.ph-sync {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  margin-top: 0.6rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  background: var(--accent-soft, rgba(99, 102, 241, 0.12));
+}
+.ph-sync-text {
+  flex: 1 1 14rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.ph-sync-text strong {
+  font-size: 0.9rem;
+  color: var(--text, #f3f4f6);
+}
+.ph-sync-text span {
+  font-size: 0.78rem;
+  color: var(--muted, #9ca3af);
+}
+.ph-sync-btn {
+  min-height: 2.4rem;
+  padding: 0 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong, var(--line, #374151));
+  background: var(--surface, transparent);
+  color: var(--text, #f3f4f6);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ph-sync-btn-on {
+  border-color: var(--accent, #818cf8);
+  background: var(--accent, #818cf8);
+  color: var(--on-accent, #fff);
+}
+.ph-sync-btn[disabled] {
+  opacity: 0.6;
+  cursor: default;
+}
 .ph-pins-list {
   display: flex;
   flex-wrap: wrap;

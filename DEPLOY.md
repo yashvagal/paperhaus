@@ -217,3 +217,11 @@ emails on the Access policy "Paperhaus friends" through the Cloudflare API.
    `CF_ACCESS_POLICY_ID` (text, the ID of "Paperhaus friends"). Optional: `ADMIN_EMAILS`,
    comma-separated owners (default yashvagal@gmail.com).
 3. Retry the latest deployment so the variables take effect.
+
+### 3e. File sync across devices (nothing to set up)
+
+"Sync across your devices" under Recent on the home page is off until each person turns it on.
+It uses the same `ESIGN` KV namespace as signing (keys `fo:`, `fi:`, `fb:` and `k:files-master`),
+so there are no new variables. Files are encrypted in the browser with a per-account key; each
+account keeps its newest 12 files, up to 24 MB each and 150 MB in total. Code:
+`functions/api/files/[[path]].js` and the sync section of `kit/tools/pin/flow.js`.

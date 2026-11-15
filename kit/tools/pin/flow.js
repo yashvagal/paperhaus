@@ -1,12 +1,15 @@
-/* Paperhaus: keep working on the same file, and remember recent files on this device.
+/* Paperhaus: keep working on the same file, and remember recent files.
  *
- * When any tool saves a file, Paperhaus keeps a copy in this browser (IndexedDB, never
- * uploaded) and offers the next steps: compress it, add a password, sign it... The next
+ * When any tool saves a file, Paperhaus keeps a copy in this browser (IndexedDB) and offers
+ * the next steps: compress it, add a password, sign it... The next
  * tool opens with the file already loaded, so there is no download and upload again.
  *
  * How it knows a tool saved a file: tools save by clicking a download link to a blob, so
  * this watches blob links being made and clicked. How the next tool gets the file: its
  * address carries ?ph-file=<id>, and the file is put into the page's file picker.
+ * Sync (opt-in, per account): when it is on, each saved file is also encrypted here with the
+ * account's key (AES-GCM) and uploaded to /api/files, so it shows up in Recent on every device
+ * the person signs in to. Off by default; turning it off removes the synced copies.
  * Runs on every app page; plain script, no build step.
  */
 (function () {
@@ -76,13 +79,16 @@
       kept: !(meta && meta.temp),
       blob: blob,
     };
+    return store(rec).then(function () {
+      if (rec.kept && syncCached()) upload(rec).catch(function () {});
+      return rec;
+    });
+  }
+
+  function store(rec) {
     return tx('readwrite', function (s) {
       s.put(rec);
-    })
-      .then(prune)
-      .then(function () {
-        return rec;
-      });
+    }).then(prune);
   }
 
   /** Keep the newest files, within a size budget. Hand-off copies go after an hour. */
@@ -108,10 +114,253 @@
     });
   }
 
+  /** Empties Recent here, and the synced copies too when sync is on. */
   function clear() {
-    return tx('readwrite', function (s) {
+    var local = tx('readwrite', function (s) {
       s.clear();
     });
+    var remote = syncCached()
+      ? fetch('/api/files', { method: 'DELETE', credentials: 'same-origin' }).catch(function () {})
+      : null;
+    return Promise.all([local, remote]);
+  }
+
+  // ---------------------------------------------------------------- sync across devices
+
+  var SYNC_LIMIT = 24 * 1024 * 1024 - 64;
+  var enc = new TextEncoder();
+  var dec = new TextDecoder();
+  var keyP = null;
+  var statusP = null;
+
+  function syncCached() {
+    try {
+      return localStorage.getItem('ph-sync-on') === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+  function remember(on) {
+    try {
+      localStorage.setItem('ph-sync-on', on ? '1' : '0');
+    } catch (e) {
+      /* fine */
+    }
+  }
+
+  function api(path, init) {
+    return fetch('/api/files' + path, Object.assign({ credentials: 'same-origin' }, init || {})).then(function (r) {
+      if (!r.ok) throw new Error('sync ' + r.status);
+      return r;
+    });
+  }
+
+  /** { on, files } for the signed-in account; one request per page unless refreshed. */
+  function syncStatus(refresh) {
+    if (!statusP || refresh) {
+      statusP = api('')
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (j) {
+          remember(!!j.on);
+          return { on: !!j.on, files: Array.isArray(j.files) ? j.files : [] };
+        })
+        .catch(function () {
+          statusP = null;
+          return { on: syncCached(), files: [], offline: true };
+        });
+    }
+    return statusP;
+  }
+
+  function key() {
+    if (!keyP) {
+      keyP = api('/key')
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (j) {
+          return crypto.subtle.importKey('raw', unb64(j.key), 'AES-GCM', false, ['encrypt', 'decrypt']);
+        })
+        .catch(function (e) {
+          keyP = null;
+          throw e;
+        });
+    }
+    return keyP;
+  }
+
+  function seal(bytes) {
+    return key().then(function (k) {
+      var iv = crypto.getRandomValues(new Uint8Array(12));
+      return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, k, bytes).then(function (ct) {
+        var out = new Uint8Array(12 + ct.byteLength);
+        out.set(iv, 0);
+        out.set(new Uint8Array(ct), 12);
+        return out;
+      });
+    });
+  }
+
+  function unseal(buf) {
+    var u = new Uint8Array(buf);
+    return key().then(function (k) {
+      return crypto.subtle.decrypt({ name: 'AES-GCM', iv: u.subarray(0, 12) }, k, u.subarray(12));
+    });
+  }
+
+  function upload(rec) {
+    if (!rec.blob || rec.size > SYNC_LIMIT) return Promise.resolve(false);
+    var meta = JSON.stringify({ name: rec.name, type: rec.type, tool: rec.tool, what: rec.what, size: rec.size });
+    return Promise.all([rec.blob.arrayBuffer().then(seal), seal(enc.encode(meta))]).then(function (both) {
+      return api('/' + rec.id, {
+        method: 'PUT',
+        headers: { 'x-ph-meta': b64(both[1]), 'x-ph-at': String(rec.at), 'content-type': 'application/octet-stream' },
+        body: both[0],
+      }).then(function () {
+        statusP = null;
+        return true;
+      });
+    });
+  }
+
+  /** Send files saved here that did not finish uploading (say the page closed mid-upload). */
+  function catchUp() {
+    if (!syncCached()) return Promise.resolve();
+    return syncStatus().then(function (st) {
+      if (!st.on || st.offline) return;
+      var there = {};
+      var oldest = Infinity;
+      st.files.forEach(function (f) {
+        there[f.id] = 1;
+        oldest = Math.min(oldest, f.at);
+      });
+      var room = 12 - st.files.length;
+      return list().then(function (all) {
+        var todo = all.filter(function (r) {
+          return r.kept && !there[r.id] && r.size <= SYNC_LIMIT && (room > 0 || r.at > oldest);
+        });
+        todo = todo.slice(0, 12);
+        if (!todo.length) return;
+        return todo.reverse().reduce(function (p, r) {
+          return p.then(function () {
+            return upload(r).catch(function () {});
+          });
+        }, Promise.resolve()).then(function () {
+          return syncStatus(true);
+        });
+      });
+    });
+  }
+
+  /** Synced files that are not in this browser yet, as Recent entries without a blob. */
+  function remoteList() {
+    return syncStatus().then(function (st) {
+      if (!st.on || !st.files.length) return [];
+      return Promise.all(
+        st.files.map(function (f) {
+          return unseal(unb64(f.meta))
+            .then(function (m) {
+              var j = JSON.parse(dec.decode(m));
+              return { id: f.id, name: j.name || 'file', type: j.type || '', size: j.size || f.size, at: f.at, tool: j.tool || '', what: j.what || '', kept: true, remote: true };
+            })
+            .catch(function () {
+              return null;
+            });
+        })
+      ).then(function (all) {
+        return all.filter(Boolean);
+      });
+    });
+  }
+
+  /** Recent here plus synced files from other devices, newest first. */
+  function listAll() {
+    return Promise.all([list(), remoteList().catch(function () { return []; })]).then(function (both) {
+      var have = {};
+      both[0].forEach(function (r) {
+        have[r.id] = 1;
+      });
+      return both[0]
+        .concat(
+          both[1].filter(function (r) {
+            return !have[r.id];
+          })
+        )
+        .sort(function (a, b) {
+          return b.at - a.at;
+        });
+    });
+  }
+
+  /** A file from Recent here, or downloaded from sync (and then kept here too). */
+  function getAny(id) {
+    return get(id).then(function (rec) {
+      if (rec || !syncCached()) return rec;
+      return Promise.all([api('/' + id).then(function (r) { return r.arrayBuffer(); }), remoteList()])
+        .then(function (both) {
+          var info = both[1].filter(function (r) {
+            return r.id === id;
+          })[0];
+          if (!info) return null;
+          return unseal(both[0]).then(function (plain) {
+            var r = Object.assign({}, info, { blob: new Blob([plain], { type: info.type }) });
+            delete r.remote;
+            r.size = r.blob.size;
+            return store(r).then(function () {
+              return r;
+            });
+          });
+        })
+        .catch(function () {
+          return null;
+        });
+    });
+  }
+
+  /** Turn sync on (and send what is already in Recent here) or off (and forget synced copies). */
+  function setSync(on) {
+    return api('/settings', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ on: !!on }),
+    }).then(function () {
+      remember(on);
+      statusP = null;
+      if (!on) return syncStatus(true);
+      return syncStatus(true).then(function (st) {
+        var there = {};
+        st.files.forEach(function (f) {
+          there[f.id] = 1;
+        });
+        return list().then(function (all) {
+          var todo = all.filter(function (r) {
+            return r.kept && !there[r.id];
+          });
+          // Oldest first, so the server keeps the newest when it trims.
+          return todo.reverse().reduce(function (p, r) {
+            return p.then(function () {
+              return upload(r).catch(function () {});
+            });
+          }, Promise.resolve());
+        }).then(function () {
+          return syncStatus(true);
+        });
+      });
+    });
+  }
+
+  function b64(u8) {
+    var s = '';
+    for (var i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  function unb64(s) {
+    var bin = atob(s);
+    var u = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return u;
   }
 
   function guessType(name) {
@@ -275,7 +524,8 @@
     head.appendChild(ok);
     var title = el('div', 'ph-done-title');
     title.appendChild(el('strong', '', rec.name));
-    title.appendChild(el('span', '', size(rec.size) + ' · saved to Recent on this device'));
+    var where = syncCached() && rec.size <= SYNC_LIMIT ? 'saved to Recent on all your devices' : 'saved to Recent on this device';
+    title.appendChild(el('span', '', size(rec.size) + ' · ' + where));
     head.appendChild(title);
     var x = el('button', 'ph-done-x');
     x.type = 'button';
@@ -324,7 +574,7 @@
     params.delete('ph-file');
     var rest = params.toString();
     history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
-    Promise.all(ids.map(get)).then(function (recs) {
+    Promise.all(ids.map(getAny)).then(function (recs) {
       var files = recs.filter(Boolean).map(function (r) {
         return new File([r.blob], r.name, { type: r.type || r.blob.type, lastModified: r.at });
       });
@@ -393,7 +643,22 @@
     document.body.classList.add('ph-has-tabbar');
   }
 
-  window.paperhausFlow = { list: list, get: get, put: put, clear: clear, kindOf: kindOf, toolHref: toolHref, showDone: showDone };
+  window.paperhausFlow = {
+    list: list,
+    listAll: listAll,
+    get: get,
+    getAny: getAny,
+    put: put,
+    clear: clear,
+    kindOf: kindOf,
+    toolHref: toolHref,
+    showDone: showDone,
+    syncStatus: syncStatus,
+    syncCached: syncCached,
+    setSync: setSync,
+    catchUp: catchUp,
+    syncLimit: SYNC_LIMIT,
+  };
 
   function start() {
     tabbar();
