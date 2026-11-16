@@ -8,7 +8,8 @@
  *   POST /api/mail/disconnect      { gmail } forget that account and revoke it at Google
  *   POST /api/mail/primary         { gmail } send from this account by default
  *   POST /api/mail/send            { to, subject, text, from?, esign?: { id, t, index } }
- *   POST /api/mail/esign           { id, t, title, senderName, notify, from, signers: [{ name, email }] }
+ *   POST /api/mail/esign           { id, t, title, senderName, notify, remind, from, signers: [{ name, email }] }
+ *   POST /api/mail/remind          { id, t, index, link }  remind one signer now (reply in their invite thread)
  *
  * One person can connect several Gmail accounts and pick which one sends.
  *
@@ -16,6 +17,7 @@
  * later (functions/api/esign/ sends "signed", "your turn" and "everyone signed" notes).
  * See functions/_shared/gmail.js for how tokens are kept.
  */
+import { scheduleReminders, stopReminders, sendReminder } from '../../_shared/reminders.js';
 import {
   GMAIL_SCOPE,
   deleteAccount,
@@ -82,6 +84,7 @@ export async function onRequest(context) {
     }
     if (request.method === 'POST' && action === 'send') return await send(request, env, user);
     if (request.method === 'POST' && action === 'esign') return await esignSetup(request, env, user);
+    if (request.method === 'POST' && action === 'remind') return await remind(request, env, user);
     return json({ error: 'not_found' }, 404);
   } catch (err) {
     return json({ error: err.code || 'server_error', detail: err.detail || String(err.message || err) }, err.code === 'gmail_not_connected' ? 409 : 500);
@@ -165,13 +168,41 @@ async function esignSetup(request, env, user) {
     title: String(b.title || 'your document').slice(0, 200),
     senderName: String(b.senderName || '').slice(0, 100),
     notify: b.notify !== false,
+    remind: b.remind !== false,
     notifyTo: user,
     gmail: acct ? acct.gmail : null,
     ordered: !!meta.ordered,
     signers: signers.map((s) => ({ name: String(s.name || '').slice(0, 100), email: s.email, me: !!s.me })),
   };
+  // Keep what Paperhaus already knows about each invite (threads, reminders sent) when this is
+  // called again, say from the Send button.
+  const old = await getRequestMail(env, b.id);
+  if (old && Array.isArray(old.signers)) {
+    rec.signers = rec.signers.map((s, i) => {
+      const o = old.signers[i];
+      return o && o.email === s.email ? { ...o, ...s } : s;
+    });
+  }
   await saveRequestMail(env, b.id, rec, Math.floor((meta.retainUntil || meta.expires) / 1000));
+  if (rec.remind && meta.status === 'out') await scheduleReminders(env, b.id, meta);
+  else if (!rec.remind) await stopReminders(env, b.id);
   return json({ ok: true });
+}
+
+/** Remind one signer now. The link is the sender's own copy (the server can't make one). */
+async function remind(request, env, user) {
+  const b = await request.json().catch(() => ({}));
+  const rec = await ownedRequest(env, user, b.id, b.t);
+  if (!rec) return json({ error: 'forbidden' }, 403);
+  const i = b.index;
+  if (!(Number.isInteger(i) && i >= 0 && i < rec.mail.signers.length)) return json({ error: 'bad_index' }, 400);
+  if (rec.meta.status !== 'out' || Date.now() > rec.meta.expires) return json({ error: 'closed' }, 409);
+  if ((await env.ESIGN.list({ prefix: `s:${b.id}:${i}` })).keys.length) return json({ error: 'already_signed' }, 409);
+  const origin = new URL(request.url).origin;
+  const link = typeof b.link === 'string' && b.link.startsWith(`${origin}/sign-request`) && b.link.length < 600 ? b.link : '';
+  const at = await sendReminder(env, rec.meta, rec.mail, i, link);
+  await saveRequestMail(env, b.id, rec.mail, Math.floor((rec.meta.retainUntil || rec.meta.expires) / 1000));
+  return json({ ok: true, at });
 }
 
 /** The signing request, if this signed-in person sent it and holds its sender token. */

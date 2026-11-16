@@ -67,6 +67,8 @@ interface Sent {
   ordered: boolean;
   /** When each signer's invite went out through the sender's Gmail (null: not sent by Paperhaus). */
   mailed?: (number | null)[];
+  /** When each signer was last reminded from this account. */
+  reminded?: (number | null)[];
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -151,9 +153,14 @@ async function pullSent(): Promise<void> {
     if (!r || !r.id || !r.key || !r.senderToken) continue;
     const mine = have.get(r.id);
     if (!mine) await saveLocal(r);
-    else if (r.mailed && JSON.stringify(r.mailed) !== JSON.stringify(mine.mailed)) {
-      const mailed = (mine.mailed || r.mailed).map((v, i) => Math.max(v || 0, (r.mailed && r.mailed[i]) || 0) || null);
-      await saveLocal({ ...mine, mailed });
+    else {
+      // Keep the latest "sent" and "reminded" times from either device.
+      const merge = (a?: (number | null)[], b?: (number | null)[]): (number | null)[] | undefined =>
+        a || b ? s0(a, b).map((_, i) => Math.max((a && a[i]) || 0, (b && b[i]) || 0) || null) : undefined;
+      const s0 = (a?: (number | null)[], b?: (number | null)[]): (number | null)[] => ((a || []).length >= (b || []).length ? a || [] : b || []);
+      const mailed = merge(mine.mailed, r.mailed);
+      const reminded = merge(mine.reminded, r.reminded);
+      if (JSON.stringify(mailed) !== JSON.stringify(mine.mailed) || JSON.stringify(reminded) !== JSON.stringify(mine.reminded)) await saveLocal({ ...mine, mailed, reminded });
     }
   }
 }
@@ -645,6 +652,18 @@ async function loadGmail(): Promise<void> {
 
 const autoSend = (): boolean => gmail.connected && prefs.get('auto-send') !== '0';
 const notifyMe = (): boolean => prefs.get('notify') !== '0';
+const remindOn = (): boolean => prefs.get('remind') !== '0';
+
+/** Remind signer i now, from the connected Gmail, in their invite thread. */
+async function remindSigner(s: Sent, i: number): Promise<number> {
+  await mailSetup(s);
+  const res = (await mailPost('/api/mail/remind', { id: s.id, t: s.senderToken, index: i, link: signLink(s.id, fromB64(s.key), s.tokens[i]) })) as { at?: number };
+  const at = (res && res.at) || Date.now();
+  s.reminded = s.reminded || new Array(s.signers.length).fill(null);
+  s.reminded[i] = at;
+  await saveSent(s);
+  return at;
+}
 
 // Set to true once Google has verified the app (no more "hasn't verified" screen).
 const GOOGLE_REVIEWED = false;
@@ -670,9 +689,10 @@ function renderMail(): void {
       <input id="es-newfrom-email" class="es-input" type="email" placeholder="name@company.com" autocomplete="email" aria-label="Email address to send from" />
       <button id="es-gmail-connect" class="es-btn es-small es-primary" type="button"><i class="ph ph-google-logo"></i> Connect</button>
     </div>
-    <span id="es-newfrom-note" class="es-sub${connected ? ' hidden' : ''}">Type the address (Gmail or Google Workspace) and press Connect. Google asks once to confirm it is yours; after that you just pick it here.${GOOGLE_REVIEWED ? '' : ' Until Google finishes reviewing Paperhaus, it shows <em>Google hasn&#39;t verified this app</em>: click <strong>Advanced</strong>, then <strong>Go to ${location.hostname}</strong>, and tick <strong>Send email on your behalf</strong>.'}</span>
+    <span id="es-newfrom-note" class="es-sub${connected ? ' hidden' : ''}">Type the address (Gmail or Google Workspace) and press Connect. Google asks once to confirm it is yours; after that you just pick it here.${GOOGLE_REVIEWED ? '' : ` Paperhaus is a private app, so the first time Google shows <em>Google hasn&#39;t verified this app</em>: click <strong>Advanced</strong>, then <strong>Go to ${escapeHtml(location.hostname)}</strong>, and tick <strong>Send email on your behalf</strong>.`}</span>
     ${connected ? `<label class="es-check-row"><input type="checkbox" id="es-auto" /> Send the invites automatically</label>
-    <label class="es-check-row"><input type="checkbox" id="es-notify" /> Email me when someone signs or declines, and when everyone is done</label>` : ''}`;
+    <label class="es-check-row"><input type="checkbox" id="es-notify" /> Email me when someone signs or declines, and when everyone is done</label>
+    <label class="es-check-row"><input type="checkbox" id="es-remind" /> Remind people who haven't signed (every 3 days, up to 4 times)</label>` : ''}`;
 
   const sel = $<HTMLSelectElement>('es-mailfrom');
   for (const a of gmail.accounts) sel.add(new Option(a.gmail, a.gmail, false, a.gmail === gmail.address));
@@ -730,6 +750,9 @@ function renderMail(): void {
   note.checked = notifyMe();
   auto.addEventListener('change', () => prefs.set('auto-send', auto.checked ? '1' : '0'));
   note.addEventListener('change', () => prefs.set('notify', note.checked ? '1' : '0'));
+  const rem = $<HTMLInputElement>('es-remind');
+  rem.checked = remindOn();
+  rem.addEventListener('change', () => prefs.set('remind', rem.checked ? '1' : '0'));
 }
 
 /** Send from this connected address from now on (remembered here and on the server). */
@@ -800,6 +823,7 @@ async function mailSetup(s: Sent): Promise<void> {
     title: s.title,
     senderName: s.fromName,
     notify: notifyMe(),
+    remind: remindOn(),
     from: s.from,
     signers: s.signers.map((x, i) => ({ name: x.name, email: x.email, me: isMe(s, i) })),
   });
@@ -877,7 +901,7 @@ function composeLinks(m: { to: string; subject: string; body: string }, from: st
   };
 }
 
-function sendButtons(s: Sent, i: number): HTMLElement {
+function sendButtons(s: Sent, i: number, canRemind = true): HTMLElement {
   const m = mail(s, i);
   const l = composeLinks(m, s.from);
   const wrap = document.createElement('div');
@@ -888,31 +912,40 @@ function sendButtons(s: Sent, i: number): HTMLElement {
     <a class="es-btn es-small" href="${escapeHtml(l.app)}"><i class="ph ph-envelope-simple"></i> Email app</a>
     <button class="es-btn es-small" type="button"><i class="ph ph-link"></i> Copy link</button>`;
   wrap.querySelector('button')!.addEventListener('click', () => void copy(signLink(s.id, fromB64(s.key), s.tokens[i])));
-  if (gmail.connected && !isMe(s, i)) {
+  const sentFirst = s.mailed && s.mailed[i];
+  if (gmail.connected && !isMe(s, i) && (canRemind || !sentFirst)) {
     // Sent through Gmail already, or send it now; the draft buttons stay as other ways.
     const sentAt = s.mailed && s.mailed[i];
+    const remindedAt = s.reminded && s.reminded[i];
     const b = document.createElement('button');
     b.type = 'button';
     b.className = `es-btn es-small${sentAt ? '' : ' es-primary'}`;
-    b.innerHTML = sentAt ? '<i class="ph ph-arrow-clockwise"></i> Send again' : '<i class="ph ph-paper-plane-tilt"></i> Send';
+    b.innerHTML = sentAt ? '<i class="ph ph-bell-ringing"></i> Remind' : '<i class="ph ph-paper-plane-tilt"></i> Send';
     b.addEventListener('click', async () => {
       b.disabled = true;
       try {
-        await mailSetup(s);
-        await sendInvite(s, i);
-        toast(`Sent to ${s.signers[i].email}`);
-        status.textContent = `Sent ${formatDate(Date.now(), true)}`;
-        b.innerHTML = '<i class="ph ph-arrow-clockwise"></i> Send again';
-        b.classList.remove('es-primary');
+        if (s.mailed && s.mailed[i]) {
+          const at = await remindSigner(s, i);
+          toast(`Reminded ${s.signers[i].email}`);
+          status.textContent = `Reminded ${formatDate(at, true)}`;
+        } else {
+          await mailSetup(s);
+          await sendInvite(s, i);
+          toast(`Sent to ${s.signers[i].email}`);
+          status.textContent = `Sent ${formatDate(Date.now(), true)}`;
+          b.innerHTML = '<i class="ph ph-bell-ringing"></i> Remind';
+          b.classList.remove('es-primary');
+        }
       } catch (err) {
-        showAlert('Could not send it', String((err as Error).message || err));
+        const msg = String((err as Error).message || err);
+        showAlert('Could not send it', /already_signed/.test(msg) ? 'They have already signed.' : msg);
       } finally {
         b.disabled = false;
       }
     });
     const status = document.createElement('span');
     status.className = 'es-sent-tag';
-    status.textContent = sentAt ? `Sent ${formatDate(sentAt, true)}` : '';
+    status.textContent = remindedAt ? `Reminded ${formatDate(remindedAt, true)}` : sentAt ? `Sent ${formatDate(sentAt, true)}` : '';
     wrap.prepend(status);
     wrap.prepend(b);
   }
@@ -1010,6 +1043,33 @@ async function fillSent(item: HTMLElement, s: Sent): Promise<void> {
     dl.onclick = () => void downloadSigned(s, state);
     actions.appendChild(dl);
   }
+  if (state.status === 'out' && gmail.connected) {
+    // Who can be reminded now: not signed, not me, invited through Gmail; only the current
+    // person when the order is fixed.
+    let waiting = s.signers.map((_, i) => i).filter((i) => !state.signers[i].signed);
+    if (s.ordered) waiting = waiting.slice(0, 1);
+    const targets = waiting.filter((i) => !isMe(s, i) && s.mailed && s.mailed[i]);
+    if (targets.length > 1) {
+      const all = document.createElement('button');
+      all.className = 'es-btn es-small';
+      all.innerHTML = `<i class="ph ph-bell-ringing"></i> Remind ${targets.length} people`;
+      all.onclick = async () => {
+        all.disabled = true;
+        let ok = 0;
+        for (const i of targets) {
+          try {
+            await remindSigner(s, i);
+            ok++;
+          } catch {
+            /* counted below */
+          }
+        }
+        toast(ok === targets.length ? `Reminded ${ok} people` : `Reminded ${ok} of ${targets.length}`);
+        void renderSent();
+      };
+      actions.appendChild(all);
+    }
+  }
   const rec = document.createElement('button');
   rec.className = 'es-btn es-small';
   rec.innerHTML = '<i class="ph ph-file-text"></i> Signing record';
@@ -1039,7 +1099,9 @@ async function fillSent(item: HTMLElement, s: Sent): Promise<void> {
           .catch((): undefined => undefined);
       }
     }
-    if (!st.signed && state.status === 'out') row.appendChild(sendButtons(s, i));
+    // With a fixed order, only the person whose turn it is can be reminded.
+    const turn = !s.ordered || s.signers.findIndex((_, j) => !state.signers[j].signed) === i;
+    if (!st.signed && state.status === 'out') row.appendChild(sendButtons(s, i, turn));
     signersHost.appendChild(row);
   });
 

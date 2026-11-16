@@ -225,3 +225,13 @@ It uses the same `ESIGN` KV namespace as signing (keys `fo:`, `fi:`, `fb:` and `
 so there are no new variables. Files are encrypted in the browser with a per-account key; each
 account keeps its newest 12 files, up to 24 MB each and 150 MB in total. Code:
 `functions/api/files/[[path]].js` and the sync section of `kit/tools/pin/flow.js`.
+
+### 3f. Signing reminders (nothing to set up)
+
+With Gmail connected, the Sign page's "Remind people who haven't signed" box (on by default)
+sends a short reply in each waiting signer's invite thread every 3 days, up to 4 times, while
+the request is open (only the current signer when the order is fixed). "Remind" buttons in
+Sent for signature send one right away. The schedule is the GitHub Actions workflow
+`.github/workflows/sign-reminders.yml` (hourly), which calls `/api/esign/p/run-reminders`
+(public, sends only what is due, runs at most every 15 minutes). Code:
+`functions/_shared/reminders.js`, `/api/mail/remind`.

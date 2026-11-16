@@ -1,0 +1,18 @@
+# Sends signing reminders that are due (functions/_shared/reminders.js).
+# The endpoint only sends what is due and runs at most every 15 minutes, so it needs no secret.
+name: Sign reminders
+
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Send due reminders
+        run: curl -fsS -X POST --max-time 60 https://paperhaus.pages.dev/api/esign/p/run-reminders

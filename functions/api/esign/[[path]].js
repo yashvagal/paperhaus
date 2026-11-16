@@ -38,6 +38,7 @@
 
 import { sealDigest, b64 as b64u8 } from '../../_shared/seal.js';
 import { getRequestMail, mailConfigured, sendMail } from '../../_shared/gmail.js';
+import { runReminders } from '../../_shared/reminders.js';
 
 const DAYS = 14; // time to sign
 const KEEP = [14, 365, 2555]; // how long the signed record is kept: 14 days, 1 year, 7 years
@@ -55,6 +56,10 @@ export async function onRequest(context) {
     const method = request.method;
 
     if (parts[0] === 'new' && parts.length === 1 && method === 'POST') return await create(request, env);
+    // Signing reminders (functions/_shared/reminders.js). Public on purpose (under the signing
+    // page's public path) so the hourly schedule can call it: it only sends reminders that are
+    // due, and runs at most every 15 minutes however often it is called.
+    if (parts[0] === 'p' && parts[1] === 'run-reminders' && parts.length === 2) return json(await runReminders(env));
     if (parts[0] === 'p' && parts[1] && isId(parts[1])) {
       const id = parts[1];
       const action = parts[2] || '';
@@ -65,7 +70,10 @@ export async function onRequest(context) {
       const who = await role(meta, token);
       if (!who) return json({ error: 'forbidden' }, 403);
 
-      if (method === 'GET' && action === '') return json(await state(env, id, meta, who, true));
+      if (method === 'GET' && action === '') {
+        if (who.role === 'sender' && mailConfigured(env)) context.waitUntil(runReminders(env).catch(() => null));
+        return json(await state(env, id, meta, who, true));
+      }
       if (method === 'GET' && action === 'doc') return bytes(await env.ESIGN.get(`d:${id}`, 'arrayBuffer'));
       if (method === 'GET' && action === 'subs') return json(await subs(env, id, meta));
       if (method === 'POST' && action === 'view') return await view(request, env, id, meta, who);
