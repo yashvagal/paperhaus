@@ -1248,6 +1248,16 @@ async function loadIdentity(): Promise<void> {
       identity = { email: j.email || '', name: j.name || '' };
     }
   } catch {
+    /* fine */
+  }
+  // The name the owner gave this person on the invite page (people.html), if any.
+  try {
+    const r = await fetch('/api/admin/me', { credentials: 'same-origin' });
+    if (r.ok) {
+      const j = (await r.json()) as { name?: string };
+      if (j.name) identity.name = j.name;
+    }
+  } catch {
     /* not behind Access */
   }
   const from = $<HTMLInputElement>('es-from');

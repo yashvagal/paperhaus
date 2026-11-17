@@ -107,7 +107,7 @@ async function start(): Promise<void> {
     const e = err as ApiError;
     if (e.status === 404) fail('This request has ended', 'The sender cancelled or deleted it, or the time it was kept for has passed. Ask them to send it again.');
     else if (e.status === 403) fail('This link does not work', 'Open the signing link from your email again, all of it.');
-    else fail('Paperhaus could not be reached', 'Check your connection and reload the page.');
+    else fail('The signing service could not be reached', 'Check your connection and reload the page.');
     return;
   }
   try {
@@ -137,7 +137,7 @@ async function start(): Promise<void> {
   me = state.role === 'signer' && state.index !== null ? state.index : -1;
   if (me >= 0 && !state.signers[me].signed && state.status === 'out') void api.view(link.id, link.token).catch((): undefined => undefined);
   await loadSubs();
-  document.title = `${env.title} | Sign with Paperhaus`;
+  document.title = `${env.title} | Signature request`;
   await show();
 }
 

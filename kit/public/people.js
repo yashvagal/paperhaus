@@ -4,8 +4,11 @@
   var msg = document.getElementById('msg');
   var count = document.getElementById('count');
   var email = document.getElementById('email');
+  var nameIn = document.getElementById('name');
   var addbtn = document.getElementById('addbtn');
   var me = '';
+  var names = {};
+  var emails = [];
   var ERR = {
     not_allowed: 'Only the owner can change who can use Paperhaus.',
     not_configured: 'This page is not set up yet: the Cloudflare key is missing.',
@@ -17,43 +20,70 @@
     return fetch('/api/admin/' + path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {})
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(ERR[j.error] || j.detail || 'Something went wrong. Try again.'); return j; }); });
   }
-  function render(emails) {
+  function el(tag, cls, text) { var x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; }
+  function take(j) { if (j.emails) emails = j.emails; if (j.names) names = j.names; render(); }
+  function label(e) { return names[e] || ''; }
+  function render() {
     list.innerHTML = '';
     count.textContent = emails.length + (emails.length === 1 ? ' person' : ' people');
-    emails.slice().sort().forEach(function (e) {
-      var li = document.createElement('li');
-      var s = document.createElement('span');
-      s.textContent = e;
-      li.appendChild(s);
-      if (e === me) {
-        var y = document.createElement('span'); y.className = 'you'; y.textContent = 'you'; li.appendChild(y);
-      } else {
-        var b = document.createElement('button');
-        b.type = 'button'; b.className = 'rm'; b.textContent = 'Remove';
+    emails.slice().sort(function (a, b) { return (label(a) || a).localeCompare(label(b) || b); }).forEach(function (e) {
+      var li = el('li');
+      var who = el('div', 'who');
+      var n = label(e);
+      who.appendChild(n ? el('strong', '', n) : el('strong', 'noname', 'No name yet'));
+      who.appendChild(el('small', '', e + (e === me ? ' · you' : '')));
+      li.appendChild(who);
+      var acts = el('div', 'acts');
+      var ed = el('button', 'ed', n ? 'Edit name' : 'Add name');
+      ed.type = 'button';
+      ed.addEventListener('click', function () { editName(li, who, acts, e); });
+      acts.appendChild(ed);
+      if (e !== me) {
+        var b = el('button', 'rm', 'Remove');
+        b.type = 'button';
         b.addEventListener('click', function () {
-          if (!b.classList.contains('sure')) { b.classList.add('sure'); b.textContent = 'Remove ' + e.split('@')[0] + '?'; return; }
+          if (!b.classList.contains('sure')) { b.classList.add('sure'); b.textContent = 'Remove ' + (n || e.split('@')[0]) + '?'; return; }
           b.disabled = true;
-          call('remove', { email: e }).then(function (j) { render(j.emails); say(e + ' removed.', 'good'); })
+          call('remove', { email: e }).then(function (j) { take(j); say(e + ' removed.', 'good'); })
             .catch(function (err) { b.disabled = false; say(err.message, 'bad'); });
         });
-        li.appendChild(b);
+        acts.appendChild(b);
       }
+      li.appendChild(acts);
       list.appendChild(li);
     });
+  }
+  function editName(li, who, acts, e) {
+    var input = el('input', 'nm');
+    input.type = 'text'; input.maxLength = 80; input.placeholder = 'Full name'; input.value = label(e);
+    input.setAttribute('aria-label', 'Name for ' + e);
+    var save = el('button', 'ed', 'Save');
+    save.type = 'button';
+    who.hidden = true; acts.hidden = true;
+    li.insertBefore(input, who); li.insertBefore(save, who);
+    input.focus();
+    function done() {
+      save.disabled = true;
+      call('name', { email: e, name: input.value }).then(function (j) { take(j); say('Saved.', 'good'); })
+        .catch(function (err) { save.disabled = false; say(err.message, 'bad'); });
+    }
+    save.addEventListener('click', done);
+    input.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); done(); } if (ev.key === 'Escape') render(); });
   }
   document.getElementById('add').addEventListener('submit', function (ev) {
     ev.preventDefault();
     var e = email.value.trim().toLowerCase();
+    var n = nameIn.value.trim();
     if (!e) return;
     addbtn.disabled = true; say('Adding...');
-    call('add', { email: e }).then(function (j) {
-      render(j.emails); email.value = '';
-      say(j.changed ? e + ' can now sign in.' : e + ' was already on the list.', 'good');
+    call('add', { email: e, name: n }).then(function (j) {
+      take(j); email.value = ''; nameIn.value = '';
+      say(j.changed ? (n || e) + ' can now sign in.' : (n ? 'Saved ' + n + '. ' : '') + e + ' was already on the list.', 'good');
     }).catch(function (err) { say(err.message, 'bad'); })
       .then(function () { addbtn.disabled = false; });
   });
   fetch('/cdn-cgi/access/get-identity').then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; })
     .then(function (id) { me = String((id && id.email) || '').toLowerCase(); return call('people'); })
-    .then(function (j) { render(j.emails); })
+    .then(take)
     .catch(function (err) { list.innerHTML = ''; say(err.message, 'bad'); });
 })();

@@ -1075,3 +1075,11 @@
     padding-left: 0;
   }
 }
+.es-top-icon {
+  font-size: 1.45rem;
+  color: var(--es-accent, currentColor);
+}
+.es-signer-page .es-wordmark {
+  letter-spacing: -0.02em;
+  font-size: 1.1rem;
+}

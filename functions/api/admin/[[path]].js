@@ -1,10 +1,14 @@
 /**
  * Paperhaus invite list: who can sign in. Only the owner (ADMIN_EMAILS) can use it.
  *
- *   GET  /api/admin/me       { admin }            (anyone signed in; drives the menu item)
- *   GET  /api/admin/people   { emails: [...] }
- *   POST /api/admin/add      { email }
+ *   GET  /api/admin/me       { admin, name }      (anyone signed in; menu item, and the name
+ *                                                 the Sign page fills in for them)
+ *   GET  /api/admin/people   { emails: [...], names: { email: name } }
+ *   POST /api/admin/add      { email, name }
+ *   POST /api/admin/name     { email, name }      set or change someone's name
  *   POST /api/admin/remove   { email }
+ *
+ * Names live in the ESIGN KV namespace under `people-names` (email -> name).
  *
  * The list is the Cloudflare Access policy "Paperhaus friends". This edits it through the
  * Cloudflare API with a token that can only edit Access apps and policies. Pages variables
@@ -29,14 +33,21 @@ export async function onRequest(context) {
   const admin = admins.includes(user);
   const configured = !!(env.CF_API_TOKEN && env.CF_ACCOUNT_ID && env.CF_ACCESS_POLICY_ID);
 
-  if (request.method === 'GET' && action === 'me') return json({ admin });
+  if (request.method === 'GET' && action === 'me') return json({ admin, name: (await getNames(env))[user] || '' });
   if (!admin) return json({ error: 'not_allowed' }, 403);
+  if (request.method === 'POST' && action === 'name') {
+    const body = await request.json().catch(() => ({}));
+    const email = String(body.email || '').trim().toLowerCase();
+    if (!isEmail(email)) return json({ error: 'bad_email' }, 400);
+    const names = await setName(env, email, body.name);
+    return json({ ok: true, names });
+  }
   if (!configured) return json({ error: 'not_configured' }, 503);
 
   try {
     if (request.method === 'GET' && action === 'people') {
       const policy = await getPolicy(env);
-      return json({ emails: emailsOf(policy) });
+      return json({ emails: emailsOf(policy), names: await getNames(env) });
     }
     if (request.method === 'POST' && (action === 'add' || action === 'remove')) {
       const body = await request.json().catch(() => ({}));
@@ -46,16 +57,34 @@ export async function onRequest(context) {
       const policy = await getPolicy(env);
       const current = emailsOf(policy);
       const has = current.includes(email);
-      if ((action === 'add' && has) || (action === 'remove' && !has)) return json({ emails: current, changed: false });
+      if (action === 'add' && body.name !== undefined) await setName(env, email, body.name);
+      if ((action === 'add' && has) || (action === 'remove' && !has)) return json({ emails: current, names: await getNames(env), changed: false });
       const include = policy.include.filter((r) => !(r.email && String(r.email.email).toLowerCase() === email));
       if (action === 'add') include.push({ email: { email } });
       const saved = await putPolicy(env, policy, include);
-      return json({ emails: emailsOf(saved), changed: true });
+      if (action === 'remove') await setName(env, email, '');
+      return json({ emails: emailsOf(saved), names: await getNames(env), changed: true });
     }
     return json({ error: 'not_found' }, 404);
   } catch (err) {
     return json({ error: 'cloudflare_error', detail: String(err.message || err).slice(0, 300) }, 502);
   }
+}
+
+async function getNames(env) {
+  if (!env.ESIGN) return {};
+  const n = await env.ESIGN.get('people-names', 'json');
+  return n && typeof n === 'object' ? n : {};
+}
+
+async function setName(env, email, name) {
+  const names = await getNames(env);
+  const clean = String(name || '').replace(/[\r\n<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+  if ((names[email] || '') === clean) return names;
+  if (clean) names[email] = clean;
+  else delete names[email];
+  if (env.ESIGN) await env.ESIGN.put('people-names', JSON.stringify(names));
+  return names;
 }
 
 function emailsOf(policy) {

@@ -5,17 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="paperhaus-public" content="1" />
     <meta name="referrer" content="no-referrer" />
-    <title>Sign a document | BentoPDF</title>
-    <meta name="description" content="Review and sign a document sent to you with Paperhaus." />
+    <title>Signature request</title>
+    <meta name="description" content="Review and sign a document sent to you." />
     <link href="/src/css/styles.css" rel="stylesheet" />
-    <link rel="icon" type="image/svg+xml" href="/images/favicon.svg" />
-    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%23e8915a%27/%3E%3Cpath d=%27M9 23l2-6 9-9 4 4-9 9z%27 fill=%27%23fff%27/%3E%3C/svg%3E" />
   </head>
 
   <body class="antialiased bg-gray-900 es-signer-page">
     <header class="es-top">
-      <img class="es-logo" src="{{baseUrl}}{{#if brandLogo}}{{brandLogo}}{{else}}images/favicon.svg{{/if}}" alt="" />
-      <span class="es-wordmark">{{#if brandName}}{{brandName}}{{else}}Paperhaus{{/if}}</span>
+      <i class="ph ph-pen-nib es-top-icon" aria-hidden="true"></i>
+      <span class="es-wordmark">Signature request</span>
       <span class="es-top-right"><i class="ph ph-lock-simple"></i> Private signing link</span>
     </header>
 
@@ -47,7 +46,7 @@
         </section>
         <div id="es-pages" class="es-pages"></div>
         <p class="es-sub es-fine">
-          Signed with Paperhaus. The document was encrypted on the sender's device, and only
+          The document was encrypted on the sender's device, and only
           people with a signing link can open it. Every step is kept in a locked audit trail.
         </p>
       </div>

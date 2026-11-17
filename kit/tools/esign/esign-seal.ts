@@ -50,8 +50,8 @@ export async function sealPdf(bytes: Uint8Array, sign: (digestHex: string) => Pr
     SubFilter: 'adbe.pkcs7.detached',
     ByteRange: [0, PDFName.of(BR_MARK), PDFName.of(BR_MARK), PDFName.of(BR_MARK)],
     Contents: PDFHexString.of('0'.repeat(SEAL_BYTES * 2)),
-    Reason: PDFString.of('Everyone signed. Sealed by Paperhaus.'),
-    Name: PDFString.of('Paperhaus Seal'),
+    Reason: PDFString.of('Everyone signed. Sealed electronically.'),
+    Name: PDFString.of('Document Seal'),
     M: PDFString.fromDate(new Date()),
   });
   const sigRef = ctx.register(sig);
@@ -61,7 +61,7 @@ export async function sealPdf(bytes: Uint8Array, sign: (digestHex: string) => Pr
     FT: 'Sig',
     Rect: [0, 0, 0, 0],
     V: sigRef,
-    T: PDFString.of('Paperhaus seal'),
+    T: PDFString.of('Document seal'),
     F: 132,
     P: page.ref,
   });

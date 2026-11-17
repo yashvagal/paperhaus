@@ -20,7 +20,13 @@
   .ppl ul { list-style: none; padding: 0; margin: 0; border: 1px solid var(--line, #f0e1cd); border-radius: 16px; overflow: hidden; background: var(--surface, #fff); }
   .ppl li { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.75rem 1rem; border-top: 1px solid var(--line, #f0e1cd); }
   .ppl li:first-child { border-top: 0; }
-  .ppl li span { min-width: 0; overflow-wrap: anywhere; }
+  .ppl li .who { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 0.1rem; overflow-wrap: anywhere; }
+  .ppl li .who strong { font-weight: 600; }
+  .ppl li .who small { color: var(--muted, #937d69); font-size: 0.85rem; }
+  .ppl li .who .noname { color: var(--muted, #937d69); font-style: italic; font-weight: 400; }
+  .ppl li .acts { display: flex; gap: 0.25rem; flex-shrink: 0; align-items: center; }
+  .ppl .ed { background: transparent; color: var(--accent, #b35a22); padding: 0.35rem 0.6rem; font-weight: 600; }
+  .ppl li input.nm { flex: 1 1 10rem; padding: 0.45rem 0.6rem; border-radius: 10px; }
   .ppl li .you { color: var(--muted, #937d69); font-size: 0.85rem; }
   .ppl .rm { background: transparent; color: var(--bad, #b23b2c); padding: 0.35rem 0.6rem; font-weight: 600; }
   .ppl .rm.sure { background: var(--bad-soft, #fde4df); }
@@ -32,8 +38,9 @@
 <main class="ppl">
   <p class="back"><a href="/">Back to Paperhaus</a></p>
   <h1>Who can use Paperhaus</h1>
-  <p class="sub">Add someone's email and they can sign in right away with a one-time code sent to that address.</p>
+  <p class="sub">Add someone's name and email and they can sign in right away with a one-time code sent to that address. Their name fills in for them when they sign or send documents.</p>
   <form id="add">
+    <input id="name" type="text" autocomplete="off" placeholder="Full name" aria-label="Name" maxlength="80">
     <input id="email" type="email" inputmode="email" autocomplete="off" placeholder="name@example.com" aria-label="Email to invite" required>
     <button id="addbtn" type="submit">Add</button>
   </form>

@@ -174,7 +174,7 @@ const SIGN = { name: 'ECDSA', hash: 'SHA-256' };
 async function makeSealKey() {
   const kp = await crypto.subtle.generateKey(ALG, true, ['sign', 'verify']);
   const spki = new Uint8Array(await crypto.subtle.exportKey('spki', kp.publicKey));
-  const name = seq(set(seq(oid(OID.o), utf8('Paperhaus'))), set(seq(oid(OID.cn), utf8('Paperhaus Seal'))));
+  const name = seq(set(seq(oid(OID.o), utf8('Electronic Signatures'))), set(seq(oid(OID.cn), utf8('Document Seal'))));
   const serial = crypto.getRandomValues(new Uint8Array(16));
   serial[0] &= 0x7f;
   serial[0] |= 0x01;
@@ -213,10 +213,14 @@ async function makeSealKey() {
 }
 
 async function sealKey(kv) {
-  let k = await kv.get('k:seal', 'json');
+  // k:seal2 (Nov 17, 2026): the certificate names no product ("Document Seal"). The first
+  // key, k:seal ("Paperhaus Seal"), is kept but no longer used; PDFs sealed with it carry
+  // their own certificate and still verify.
+  let k = await kv.get('k:seal2', 'json');
   if (!k) {
     k = await makeSealKey();
-    await kv.put('k:seal', JSON.stringify(k));
+    await kv.put('k:seal2', JSON.stringify(k));
+    k = (await kv.get('k:seal2', 'json')) || k;
   }
   return {
     key: await crypto.subtle.importKey('jwk', k.jwk, ALG, false, ['sign']),

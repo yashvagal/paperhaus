@@ -437,8 +437,8 @@ export async function buildSignedPdf(
   await addCertificate(pdf, env, state, subs, original);
   if (state.events?.length) await addAuditPage(pdf, env, state);
   pdf.setTitle(env.title);
-  pdf.setSubject(`Signed with Paperhaus. Envelope ${state.id}.`);
-  pdf.setProducer('Paperhaus');
+  pdf.setSubject(`Signed electronically. Envelope ${state.id}.`);
+  pdf.setProducer('Electronic signatures');
   pdf.setModificationDate(new Date());
   view.destroy();
   return pdf.save();
@@ -490,7 +490,7 @@ async function addCertificate(
     };
     line('Signing record', 20, 600, '#3a2a1f');
     y += 18;
-    line('Paperhaus electronic signatures', 9, 400, '#8f7965');
+    line('Electronic signatures', 9, 400, '#8f7965');
     y += 26;
     const rows: [string, string][] = [
       ['Document', env.title || env.docName],
@@ -546,16 +546,16 @@ async function addCertificate(
       y += 12;
     }
     y = H - 52;
-    line('Every signer opened their own private link and agreed to sign electronically. Times are as recorded by Paperhaus.', 7, 400, '#8f7965');
+    line('Every signer opened their own private link and agreed to sign electronically. Times are as recorded by the signing service.', 7, 400, '#8f7965');
     y += 11;
-    line('This PDF is sealed with the Paperhaus certificate and an independent timestamp. Any change after sealing breaks the seal.', 7, 400, '#8f7965');
+    line('This PDF is sealed with a document seal certificate and an independent timestamp. Any change after sealing breaks the seal.', 7, 400, '#8f7965');
   });
 }
 
 /** Who did something in the audit trail, by name where the envelope has it. */
 export function whoName(e: AuditEvent, env: Envelope): string {
   if (e.by === 'sender') return env.sender.name || env.sender.email;
-  if (e.by === 'paperhaus') return 'Paperhaus';
+  if (e.by === 'paperhaus') return 'Signing service';
   if (e.by === 'reader') return 'Read-only link';
   return env.signers[e.by as number]?.name || `Signer ${Number(e.by) + 1}`;
 }
@@ -787,7 +787,7 @@ export async function openRecord(env: Envelope, state: State, onDownload: (() =>
   if (state.sealed) chip('Sealed', 'es-good');
   const facts: [string, string, boolean?][] = [
     ['Signed PDF fingerprint (SHA-256)', state.sealed?.fingerprint || 'Recorded when the signed copy is first opened', !!state.sealed],
-    ['Sealed', state.sealed ? `${formatDate(state.sealed.at, true)}, Paperhaus certificate` : 'Not yet'],
+    ['Sealed', state.sealed ? `${formatDate(state.sealed.at, true)}, document seal certificate` : 'Not yet'],
     ['Timestamp', state.sealed?.timestamp ? `${state.sealed.timestamp.by} time server (RFC 3161)${state.sealed.timestamp.at ? `, ${formatDate(state.sealed.timestamp.at, true)}` : ''}` : state.sealed ? 'No time server answered' : 'Added with the seal'],
   ];
   for (const [k, v, mono] of facts) {
@@ -851,7 +851,7 @@ export async function openRecord(env: Envelope, state: State, onDownload: (() =>
     });
   }
   const until = state.retainUntil || state.expires;
-  q('[data-keep]').textContent = `Kept by Paperhaus until ${formatDate(until)}, encrypted, so only people with a signing link can open it.`;
+  q('[data-keep]').textContent = `Kept until ${formatDate(until)}, encrypted, so only people with a signing link can open it.`;
   const close = () => {
     wrap.remove();
     document.body.classList.remove('es-noscroll');
