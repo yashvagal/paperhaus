@@ -202,7 +202,8 @@ export async function sendMail(env, userEmail, { to, subject, text, threadId, in
   const list = (Array.isArray(to) ? to : [to]).map((x) => String(x).trim()).filter(Boolean);
   if (!list.length || list.length > 20 || !list.every(isEmail)) throw mailError('bad_recipient');
   const tok = await accessToken(env, userEmail, from);
-  const messageId = `<${randomHex(16)}@paperhaus.pages.dev>`;
+  // Message-ID on the sender's own domain, so nothing in the headers names Paperhaus.
+  const messageId = `<${randomHex(16)}@${tok.gmail.split('@')[1] || 'mail.gmail.com'}>`;
   const body = b64(enc.encode(String(text || '').slice(0, 20000))).replace(/.{1,76}/g, '$&\r\n');
   const headers = [
     `From: ${address(fromName || tok.name, tok.gmail)}`,

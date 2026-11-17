@@ -356,7 +356,7 @@ async function notify(env, id, action, index, res, origin) {
     const signedCount = (st.signers || []).filter((x) => x.signed).length;
     const jobs = [];
     const toOwner = (subject, text) => {
-      if (rec.notify && rec.notifyTo) jobs.push(sendMail(env, meta.sender, { to: rec.notifyTo, subject, text: `${text}\n\nSee every request: ${manage}\n\nPaperhaus`, fromName: 'Paperhaus', from: rec.gmail }));
+      if (rec.notify && rec.notifyTo) jobs.push(sendMail(env, meta.sender, { to: rec.notifyTo, subject, text: `${text}\n\nSee every request: ${manage}`, fromName: from, from: rec.gmail }));
     };
     const toSigner = (s, text) => {
       if (!s || s.me || !s.email) return;
