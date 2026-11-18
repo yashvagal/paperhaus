@@ -81,6 +81,8 @@
 .es-input,
 .es-textarea {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   border-radius: 12px;
   border: 1px solid var(--es-line-strong);
   background: var(--es-surface-2);
@@ -99,6 +101,8 @@
 }
 .es-label {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 0.35rem;
   font-size: 0.85rem;
   font-weight: 600;
@@ -802,7 +806,7 @@
 }
 .es-modes {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr));
   gap: 0.7rem;
 }
 .es-mode {
@@ -915,7 +919,7 @@
 }
 .es-record-facts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
   gap: 0.7rem;
   margin-bottom: 1.1rem;
 }
@@ -1082,4 +1086,31 @@
 .es-signer-page .es-wordmark {
   letter-spacing: -0.02em;
   font-size: 1.1rem;
+}
+
+/* Phones: nothing may push the page wider than the screen (long names, big system text). */
+.es-card,
+.es-card > div,
+.es-main,
+.es-layout > * {
+  min-width: 0;
+}
+.es-card {
+  overflow-wrap: anywhere;
+}
+
+html {
+  overflow-x: clip;
+}
+.es-fields > * {
+  min-width: 0;
+}
+.es-btn {
+  max-width: 100%;
+}
+@media (max-width: 480px) {
+  .es-btn {
+    white-space: normal;
+    text-align: center;
+  }
 }

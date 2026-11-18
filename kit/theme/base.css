@@ -130,6 +130,8 @@
 }
 
 html {
+  /* No sideways scrolling on phones, whatever a page or tool draws too wide. */
+  overflow-x: clip;
   color-scheme: light;
   /* Paint the whole canvas (safe areas, overscroll) in the page colour, light or dark. */
   background-color: var(--bg);
@@ -559,5 +561,18 @@ footer a,
   }
   .tool-card:hover {
     transform: none;
+  }
+}
+
+/* Phones: let rows of an input and a button shrink instead of pushing the page sideways
+   (Tailwind's flex-1 keeps a min-content width), and let crowded toolbars scroll inside
+   themselves. */
+.flex-1 {
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  div:has(> #import-btn) {
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 }
