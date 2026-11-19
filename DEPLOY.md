@@ -246,3 +246,8 @@ Sent for signature send one right away. The schedule is the GitHub Actions workf
   that made it, plus documents sent for signature. Up to 30 files per account.
 - Search (header button, or press /) finds tools (`/tools-index.json`, written by the build),
   your files and documents sent for signature.
+- Open a document (`/view-document.html?id=`): pages shown with pdf.js and a quick tools bar
+  (Sign, Sign with others, Send for signature, Edit, Rotate, Make smaller, and more).
+- The document you're working on (flow.js, `ph-current` in the browser): once opened,
+  uploaded or saved, every tool starts with it loaded; Remove on the bottom bar, or the
+  tool's own remove button, clears it for all tools.

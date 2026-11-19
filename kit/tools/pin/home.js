@@ -82,6 +82,7 @@
     if (kinds[0] === 'pdf') {
       return [
         ['request-signatures?mode=me', 'Sign it', true],
+        ['request-signatures?mode=meothers', 'Sign it with others'],
         ['request-signatures?mode=others', 'Get it signed by others'],
         ['form-filler', 'Fill in the form', false, 'form'],
         ['compress-pdf', 'Compress'],
@@ -134,6 +135,7 @@
     clearBtn.addEventListener('click', function () {
       box.hidden = true;
       current = [];
+      if (flow && flow.clearCurrent) flow.clearCurrent();
     });
     head.appendChild(clearBtn);
     box.appendChild(head);
@@ -176,6 +178,8 @@
         return flow.put(f, f.name, { tool: 'Opened on Home', temp: true });
       })
     ).then(function (recs) {
+      // These become the document you're working on: every tool starts with them.
+      if (flow.setCurrent) flow.setCurrent(recs);
       offer(files, recs);
     });
   }
@@ -265,20 +269,9 @@
           row.appendChild(info);
           var open = el('button', 'ph-linkbtn', 'Open');
           open.type = 'button';
+          // Open it in the viewer, with quick tools for any change (view-document.html).
           open.addEventListener('click', function () {
-            var got = r.blob ? Promise.resolve(r) : (open.textContent = 'Opening...', open.disabled = true, flow.getAny(r.id));
-            got.then(function (rec) {
-              open.textContent = 'Open';
-              open.disabled = false;
-              if (!rec || !rec.blob) {
-                open.textContent = 'Not available';
-                return;
-              }
-              r.blob = rec.blob;
-              var f = new File([rec.blob], rec.name, { type: rec.type });
-              offer([f], [rec]);
-              window.scrollTo({ top: home.getBoundingClientRect().top + window.scrollY - 80, behavior: 'smooth' });
-            });
+            location.href = '/view-document.html?id=' + encodeURIComponent(r.id);
           });
           row.appendChild(open);
           host.appendChild(row);

@@ -125,8 +125,8 @@ function fileRow(r) {
   const get = () => (r.blob ? Promise.resolve(r) : flow.getAny(r.id));
   const open = el('button', 'dc-btn dc-btn-main', 'Open');
   open.type = 'button';
-  open.title = 'See what you can do with it';
-  open.onclick = () => (location.href = '/?ph-open=' + encodeURIComponent(r.id));
+  open.title = 'Open it and use any tool on it';
+  open.onclick = () => (location.href = '/view-document.html?id=' + encodeURIComponent(r.id));
   const dl = el('button', 'dc-btn', 'Download');
   dl.type = 'button';
   dl.onclick = () => {

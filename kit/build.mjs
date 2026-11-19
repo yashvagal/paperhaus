@@ -370,9 +370,11 @@ const entry = (page, name, icon, subtitle) => `      {
 const DOCS_TOOL = {
   name: 'My documents',
   dir: join(KIT, 'tools', 'docs'),
-  pages: ['my-documents'],
+  pages: ['my-documents', 'view-document'],
   files: [
     ['my-documents.html', 'src/pages/my-documents.html'],
+    ['view-document.html', 'src/pages/view-document.html'],
+    ['view-page.ts', 'src/js/logic/kit-docs/view-page.ts'],
     ['documents-page.js', 'src/js/logic/kit-docs/documents-page.js'],
     ['documents.css', 'src/js/logic/kit-docs/documents.css'],
   ],
@@ -874,7 +876,7 @@ const TABBAR = [
   ['/scan-document.html', 'ph-scan', 'Scan', /^\/scan-document/],
   ['/request-signatures.html', 'ph-signature', 'Sign', /^\/(request-signatures|sign-pdf)/],
   ['/#all-tools', 'ph-squares-four', 'Tools', null],
-  ['/my-documents.html', 'ph-folder-simple', 'Documents', /^\/my-documents/],
+  ['/my-documents.html', 'ph-folder-simple', 'Documents', /^\/(my-documents|view-document)/],
 ];
 function withTabbar(html, path) {
   if (!/<body[\s>]/i.test(html)) return html;

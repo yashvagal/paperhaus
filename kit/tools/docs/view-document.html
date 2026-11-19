@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Document | BentoPDF</title>
+    <meta name="description" content="Open a document and use any tool on it." />
+    <link rel="icon" type="image/svg+xml" href="/images/favicon.svg" />
+    <link href="/src/css/styles.css" rel="stylesheet" />
+  </head>
+  <body class="antialiased bg-gray-900">
+    {{> navbar }}
+
+    <main class="dc-wrap dv-wrap">
+      <a class="dv-back" href="my-documents.html"><i class="ph ph-arrow-left" aria-hidden="true"></i> My documents</a>
+      <div class="dv-head">
+        <div class="dv-title">
+          <h1 id="dv-name" class="dv-name">Opening...</h1>
+          <p id="dv-meta" class="dc-sub dv-meta"></p>
+        </div>
+        <div class="dv-head-acts">
+          <button id="dv-download" class="dc-btn" type="button" disabled><i class="ph ph-download-simple" aria-hidden="true"></i>&nbsp;Download</button>
+        </div>
+      </div>
+
+      <section class="dv-tools" aria-label="Quick tools">
+        <div class="dv-tools-label">Do something with it</div>
+        <div id="dv-tools" class="dv-tool-row"></div>
+      </section>
+
+      <section id="dv-view" class="dv-view" aria-label="Document"></section>
+    </main>
+
+    {{> footer }}
+    <script type="module" src="/src/js/utils/lucide-init.ts"></script>
+    <script type="module" src="/src/js/utils/simple-mode-footer.ts"></script>
+    <script type="module" src="/src/js/logic/kit-docs/view-page.ts"></script>
+    <script type="module" src="/src/js/mobileMenu.ts"></script>
+    <script type="module" src="/src/js/main.ts"></script>
+  </body>
+</html>

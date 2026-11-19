@@ -98,7 +98,7 @@
       var kept = 0;
       var drop = [];
       all.forEach(function (r) {
-        var stale = !r.kept && Date.now() - r.at > 3600000;
+        var stale = !r.kept && Date.now() - r.at > 3600000 && !inCurrent(r.id);
         if (stale || kept >= MAX_FILES || total + r.size > MAX_BYTES) drop.push(r.id);
         else {
           total += r.size;
@@ -494,12 +494,14 @@
   // ---------------------------------------------------------------- what to do next
 
   var PDF_STEPS = [
-    ['compress-pdf', 'Compress', 'Smaller for email.'],
+    ['request-signatures?mode=me', 'Sign it', 'Sign it yourself and download it.'],
+    ['request-signatures?mode=meothers', 'Sign it with others', 'You sign first, then they get an email.'],
+    ['request-signatures?mode=others', 'Get it signed by others', 'They get an email. You get it back signed.'],
+    ['compress-pdf', 'Make smaller', 'Easier to email.'],
     ['protect-pdf', 'Add a password', 'Only people with the password can open it.'],
-    ['request-signatures', 'Sign or send for signatures', 'Sealed, timestamped and recorded.'],
     ['pdf-multi-tool', 'Pages', 'Merge, reorder, rotate, delete or split.'],
-    ['redact-pdf', 'Redact', 'Black out details before sharing.'],
-    ['pdf-to-word', 'Convert to Word', 'An editable .docx.'],
+    ['redact-pdf', 'Black out details', 'Hide private information before sharing.'],
+    ['pdf-to-word', 'Turn into Word', 'An editable .docx.'],
     ['page-numbers', 'Add page numbers', 'Numbers in the corner of every page.'],
     ['summarize-pdf', 'Summarize', 'Key points, written on this device.'],
   ];
@@ -524,7 +526,8 @@
   }
 
   function toolHref(page, ids) {
-    return '/' + page + '.html?ph-file=' + encodeURIComponent(ids.join(','));
+    var parts = String(page).split('?');
+    return '/' + parts[0] + '.html?' + (parts[1] ? parts[1] + '&' : '') + 'ph-file=' + encodeURIComponent(ids.join(','));
   }
 
   // ---------------------------------------------------------------- watching for saved files
@@ -594,6 +597,7 @@
     if (!blob || !blob.size) return;
     put(blob, name, { tool: toolName() })
       .then(function (rec) {
+        setCurrent([rec]);
         showDone(rec);
       })
       .catch(function () {
@@ -682,6 +686,11 @@
     params.delete('ph-file');
     var rest = params.toString();
     history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+    loadInto(ids);
+  }
+
+  /** Put these files into the page's file picker, as if the person chose them. */
+  function loadInto(ids, onlyIfFits) {
     Promise.all(ids.map(getAny)).then(function (recs) {
       var files = recs.filter(Boolean).map(function (r) {
         return new File([r.blob], r.name, { type: r.type || r.blob.type, lastModified: r.at });
@@ -695,18 +704,27 @@
           if (tries++ < 60) setTimeout(hand, 150);
           return;
         }
+        var fit = files.filter(function (f) {
+          return accepts(input, f);
+        });
+        if (onlyIfFits && !fit.length) return;
+        if (!onlyIfFits) fit = files;
         setTimeout(function () {
           try {
             var dt = new DataTransfer();
-            (input.multiple ? files : files.slice(0, 1)).forEach(function (f) {
+            (input.multiple ? fit : fit.slice(0, 1)).forEach(function (f) {
               dt.items.add(f);
             });
+            autoLoading = true;
             input.files = dt.files;
             input.dispatchEvent(new Event('input', { bubbles: true }));
             input.dispatchEvent(new Event('change', { bubbles: true }));
           } catch (e) {
             /* very old browser: the person picks the file as usual */
           }
+          setTimeout(function () {
+            autoLoading = false;
+          }, 400);
         }, 250);
       })();
     });
@@ -782,6 +800,10 @@
     localSent: localSent,
     removeFile: removeFile,
     openSearch: openSearch,
+    getCurrent: getCurrent,
+    setCurrent: setCurrent,
+    clearCurrent: clearCurrent,
+    useFiles: useFiles,
     syncLimit: SYNC_LIMIT,
   };
 
@@ -927,7 +949,7 @@
           section(
             'Recent files',
             d.files.slice(0, 4).map(function (r) {
-              return { href: '/?ph-open=' + encodeURIComponent(r.id), icon: 'ph-file', name: r.name, sub: r.tool || '' };
+              return { href: '/view-document.html?id=' + encodeURIComponent(r.id), icon: 'ph-file', name: r.name, sub: r.tool || '' };
             })
           );
           results.appendChild(el('p', 'ph-search-hint', 'Type what you want to do, like "compress", "merge" or "sign", or the name of a document.'));
@@ -953,7 +975,7 @@
           })
           .slice(0, 6)
           .map(function (r) {
-            return { href: '/?ph-open=' + encodeURIComponent(r.id), icon: 'ph-file', name: r.name, sub: (r.tool ? r.tool + ' · ' : '') + new Date(r.at).toLocaleDateString() };
+            return { href: '/view-document.html?id=' + encodeURIComponent(r.id), icon: 'ph-file', name: r.name, sub: (r.tool ? r.tool + ' · ' : '') + new Date(r.at).toLocaleDateString() };
           });
         var sent = d.sent
           .filter(function (x) {
@@ -1000,10 +1022,184 @@
     });
   }
 
+
+  // ---------------------------------------------------------------- the document you're working on
+  // Once you open, upload or save a document, every tool you go to starts with it loaded,
+  // until you remove it (the "Working on" bar at the bottom). Kept in this browser.
+  var CUR_KEY = 'ph-current';
+  var autoLoading = false;
+  var NOT_TOOLS = /^\/(index(\.html)?|my-documents(\.html)?|view-document(\.html)?|people(\.html)?|privacy(\.html)?|about(\.html)?)?$/;
+
+  function getCurrent() {
+    try {
+      var c = JSON.parse(localStorage.getItem(CUR_KEY) || 'null');
+      if (c && Array.isArray(c.files) && c.files.length && Date.now() - c.at < 24 * 3600000) return c;
+    } catch (e) {
+      /* fine */
+    }
+    return null;
+  }
+  function inCurrent(id) {
+    var c = getCurrent();
+    return !!(c && c.files.some(function (f) {
+      return f.id === id;
+    }));
+  }
+  function setCurrent(recs) {
+    recs = (recs || []).filter(Boolean).slice(0, 20);
+    if (!recs.length) return;
+    try {
+      localStorage.setItem(CUR_KEY, JSON.stringify({ at: Date.now(), files: recs.map(function (r) {
+        return { id: r.id, name: r.name, type: r.type, size: r.size };
+      }) }));
+    } catch (e) {
+      /* fine */
+    }
+    currentBar();
+  }
+  function clearCurrent() {
+    var c = getCurrent();
+    try {
+      localStorage.removeItem(CUR_KEY);
+    } catch (e) {
+      /* fine */
+    }
+    currentBar();
+    // Copies made only for working on (not saved files) go too.
+    if (c) list().then(function (all) {
+      var temp = all.filter(function (r) {
+        return !r.kept && c.files.some(function (f) {
+          return f.id === r.id;
+        });
+      });
+      if (temp.length) tx('readwrite', function (s) {
+        temp.forEach(function (r) {
+          s.delete(r.id);
+        });
+      });
+    });
+  }
+  /** Files the person chose (any file picker, or dropped on Home) become the current ones. */
+  function useFiles(files, tool) {
+    files = Array.prototype.slice.call(files || []).filter(function (f) {
+      return f && f.size && f.size < 200 * 1024 * 1024;
+    }).slice(0, 20);
+    if (!files.length) return Promise.resolve([]);
+    var c = getCurrent();
+    var same = c && c.files.length === files.length && files.every(function (f, i) {
+      return c.files[i].name === f.name && c.files[i].size === f.size;
+    });
+    if (same) return Promise.resolve([]);
+    return Promise.all(files.map(function (f) {
+      return put(f, f.name, { tool: tool || toolName(), temp: true });
+    })).then(function (recs) {
+      setCurrent(recs);
+      return recs;
+    });
+  }
+  function accepts(input, f) {
+    var acc = String((input && input.accept) || '').toLowerCase().split(',').map(function (x) {
+      return x.trim();
+    }).filter(Boolean);
+    if (!acc.length) return true;
+    var name = String(f.name || '').toLowerCase();
+    var type = String(f.type || '').toLowerCase();
+    return acc.some(function (a) {
+      if (a.charAt(0) === '.') return name.slice(-a.length) === a;
+      if (a.slice(-2) === '/*') return type.indexOf(a.slice(0, -1)) === 0;
+      return type === a;
+    });
+  }
+
+  function currentBar() {
+    var bar = document.getElementById('ph-current');
+    var c = getCurrent();
+    if (!c || document.body.classList.contains('es-signer-page')) {
+      if (bar) bar.remove();
+      document.body.classList.remove('ph-has-current');
+      return;
+    }
+    if (!bar) {
+      bar = el('div', 'ph-current');
+      bar.id = 'ph-current';
+      bar.setAttribute('role', 'status');
+      document.body.appendChild(bar);
+    }
+    document.body.classList.add('ph-has-current');
+    bar.textContent = '';
+    var open = el('a', 'ph-current-open');
+    open.href = '/view-document.html?id=' + encodeURIComponent(c.files[0].id);
+    open.innerHTML = '<i class="ph ph-file-text" aria-hidden="true"></i>';
+    var t = el('span', 'ph-current-text');
+    t.appendChild(el('small', '', 'Working on'));
+    t.appendChild(el('strong', '', c.files[0].name + (c.files.length > 1 ? ' +' + (c.files.length - 1) + ' more' : '')));
+    open.appendChild(t);
+    bar.appendChild(open);
+    var x = el('button', 'ph-current-x');
+    x.type = 'button';
+    x.setAttribute('aria-label', 'Stop working on this document');
+    x.innerHTML = '<i class="ph ph-x" aria-hidden="true"></i><span>Remove</span>';
+    x.addEventListener('click', function () {
+      var onTool = !NOT_TOOLS.test(location.pathname) && pickerFor();
+      clearCurrent();
+      // Start the tool over without it.
+      if (onTool) location.reload();
+    });
+    bar.appendChild(x);
+  }
+
+  function watchPickers() {
+    // Anything chosen in any file picker becomes the document you're working on.
+    document.addEventListener(
+      'change',
+      function (e) {
+        var t = e.target;
+        if (autoLoading || !t || t.tagName !== 'INPUT' || t.type !== 'file' || t.id === 'ph-file' || !t.files || !t.files.length) return;
+        useFiles(t.files).catch(function () {});
+      },
+      true
+    );
+    window.addEventListener('storage', function (e) {
+      if (e.key === CUR_KEY) currentBar();
+    });
+    // Removing the file inside a tool (its trash or x button) removes it everywhere.
+    document.addEventListener(
+      'click',
+      function (e) {
+        var c = getCurrent();
+        if (!c || NOT_TOOLS.test(location.pathname)) return;
+        var b = e.target && e.target.closest && e.target.closest('button, [role="button"]');
+        if (!b || b.closest('#ph-current') || !b.querySelector('.ph-trash, .ph-x, [data-lucide="trash-2"], [data-lucide="trash"], [data-lucide="x"], .lucide-trash-2, .lucide-trash, .lucide-x')) return;
+        setTimeout(function () {
+          var bar = document.getElementById('ph-current');
+          var text = document.body.innerText.replace(bar ? bar.innerText : '\u0000', '');
+          var still = c.files.some(function (f) {
+            return text.indexOf(f.name) !== -1;
+          });
+          if (!still) clearCurrent();
+        }, 500);
+      },
+      true
+    );
+  }
+
+  /** On a tool page opened without a file, start with the current document loaded. */
+  function loadCurrent() {
+    var c = getCurrent();
+    if (!c || NOT_TOOLS.test(location.pathname) || /[?&]ph-file=/.test(location.search)) return;
+    if (/^\/(request-signatures|sign-request)/.test(location.pathname) && /mode=/.test(location.search) === false && location.hash === '#documents') return;
+    loadInto(c.files.map(function (f) {
+      return f.id;
+    }), true);
+  }
+
   function start() {
     tabbar();
+    loadCurrent();
     receive();
     searchButton();
+    watchPickers();
+    currentBar();
     // On any Paperhaus page, send files saved here that are not in the account yet (once a minute).
     // The home page does its own check, so it is skipped there.
     if (/^\/(index(\.html)?)?$/.test(location.pathname) || !syncCached()) return;
