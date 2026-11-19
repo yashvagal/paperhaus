@@ -223,7 +223,7 @@ emails on the Access policy "Paperhaus friends" through the Cloudflare API.
 "Sync across your devices" under Recent on the home page is on for everyone unless they turn it off.
 It uses the same `ESIGN` KV namespace as signing (keys `fo:`, `fi:`, `fb:` and `k:files-master`),
 so there are no new variables. Files are encrypted in the browser with a per-account key; each
-account keeps its newest 12 files, up to 24 MB each and 150 MB in total. Code:
+account keeps its newest 30 files, up to 24 MB each and 150 MB in total. Code:
 `functions/api/files/[[path]].js` and the sync section of `kit/tools/pin/flow.js`.
 
 ### 3f. Signing reminders (nothing to set up)
@@ -235,3 +235,14 @@ Sent for signature send one right away. The schedule is the GitHub Actions workf
 `.github/workflows/sign-reminders.yml` (hourly), which calls `/api/esign/p/run-reminders`
 (public, sends only what is due, runs at most every 15 minutes). Code:
 `functions/_shared/reminders.js`, `/api/mail/remind`.
+
+### 3g. Simpler app (Nov 18, 2026)
+
+- Sign has two tabs: New (one step at a time, starting with the PDF) and Sent (everything
+  sent for signature, filtered by Waiting, Signed, Cancelled or ended). `#documents` opens Sent.
+- Cancelling or deleting a request is undoable for 7 days (`cx:<id>` markers; the hourly
+  reminders run also deletes requests whose 7 days have passed).
+- My documents (`/my-documents.html`, kit/tools/docs): every saved file grouped by the tool
+  that made it, plus documents sent for signature. Up to 30 files per account.
+- Search (header button, or press /) finds tools (`/tools-index.json`, written by the build),
+  your files and documents sent for signature.

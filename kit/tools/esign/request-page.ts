@@ -237,6 +237,7 @@ async function loadFile(file: File): Promise<void> {
     draft.fields = [];
     $('es-drop').classList.add('hidden');
     $('es-doc').classList.remove('hidden');
+    $('es-newflow').classList.remove('es-nodoc');
     $('es-doc-name').textContent = file.name;
     $('es-doc-info').textContent = `${pdf.numPages} page${pdf.numPages === 1 ? '' : 's'}`;
     const title = $<HTMLInputElement>('es-title');
@@ -680,7 +681,7 @@ function renderMail(): void {
   box.innerHTML = `
     <div class="es-mail-row"><i class="ph ph-envelope-simple"></i>
       <div style="min-width:0;flex:1"><strong>Send from</strong>
-      <span>Paperhaus sends the invites and the signing updates from this address, by itself.</span></div></div>
+      <span>The emails go out from this address, by themselves.</span></div></div>
     <div class="es-from-pick${connected ? '' : ' hidden'}">
       <select id="es-mailfrom" class="es-input" aria-label="Send from"></select>
       <button id="es-gmail-remove" class="es-linkbtn" type="button">Remove</button>
@@ -689,7 +690,7 @@ function renderMail(): void {
       <input id="es-newfrom-email" class="es-input" type="email" placeholder="name@company.com" autocomplete="email" aria-label="Email address to send from" />
       <button id="es-gmail-connect" class="es-btn es-small es-primary" type="button"><i class="ph ph-google-logo"></i> Connect</button>
     </div>
-    <span id="es-newfrom-note" class="es-sub${connected ? ' hidden' : ''}">Type the address (Gmail or Google Workspace) and press Connect. Google asks once to confirm it is yours; after that you just pick it here.${GOOGLE_REVIEWED ? '' : ` Paperhaus is a private app, so the first time Google shows <em>Google hasn&#39;t verified this app</em>: click <strong>Advanced</strong>, then <strong>Go to ${escapeHtml(location.hostname)}</strong>, and tick <strong>Send email on your behalf</strong>.`}</span>
+    <span id="es-newfrom-note" class="es-sub${connected ? ' hidden' : ''}">Type your Gmail address and press Connect. You only do this once.${GOOGLE_REVIEWED ? '' : ` If Google says it <em>hasn&#39;t verified this app</em>, click <strong>Advanced</strong>, then <strong>Go to ${escapeHtml(location.hostname)}</strong>, and tick <strong>Send email on your behalf</strong>.`}</span>
     ${connected ? `<label class="es-check-row"><input type="checkbox" id="es-auto" /> Send the invites automatically</label>
     <label class="es-check-row"><input type="checkbox" id="es-notify" /> Email me when someone signs or declines, and when everyone is done</label>
     <label class="es-check-row"><input type="checkbox" id="es-remind" /> Remind people who haven't signed (every 3 days, up to 4 times)</label>` : ''}`;
@@ -980,6 +981,23 @@ function showReady(s: Sent): void {
 // ------------------------------------------------------------------ sent requests
 
 let pulled = false;
+type DocGroup = 'waiting' | 'signed' | 'ended';
+let docGroup: DocGroup | null = null;
+interface DocItem {
+  s: Sent;
+  state: State | null;
+  group: DocGroup;
+}
+
+/** Show the New or My documents tab. */
+function showTab(tab: 'new' | 'docs', remember = true): void {
+  document.querySelectorAll<HTMLElement>('.es-tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+  document.querySelectorAll<HTMLElement>('.es-panel').forEach((p) => (p.hidden = p.dataset.panel !== tab));
+  if (remember) history.replaceState(null, '', tab === 'docs' ? '#documents' : location.pathname + location.search);
+  if (tab === 'docs') void renderSent();
+}
+
+/** My documents: every request sent from this account, grouped by where it stands. */
 async function renderSent(): Promise<void> {
   if (!pulled) {
     pulled = true;
@@ -989,10 +1007,56 @@ async function renderSent(): Promise<void> {
     );
   }
   const list = (await listSent()).filter((s) => (s.retainUntil || s.expires) > Date.now());
-  $('es-sent').classList.toggle('hidden', !list.length);
   const host = $('es-sent-list');
+  const items: DocItem[] = await Promise.all(
+    list.map(async (s): Promise<DocItem> => {
+      try {
+        const state = await api.state(s.id, s.senderToken);
+        const group: DocGroup = state.status === 'out' ? 'waiting' : state.status === 'complete' ? 'signed' : 'ended';
+        return { s, state, group };
+      } catch {
+        return { s, state: null, group: 'ended' };
+      }
+    })
+  );
+  const count = (g: DocGroup): number => items.filter((x) => x.group === g).length;
+  const badge = $('es-docs-badge');
+  badge.textContent = String(count('waiting'));
+  badge.classList.toggle('hidden', !count('waiting'));
+  if (!docGroup || !count(docGroup)) docGroup = (['waiting', 'signed', 'ended'] as DocGroup[]).find((g) => count(g)) || 'waiting';
+
+  const filters = $('es-doc-filters');
+  filters.textContent = '';
+  const names: Record<DocGroup, string> = { waiting: 'Waiting for signatures', signed: 'Signed', ended: 'Cancelled or ended' };
+  (['waiting', 'signed', 'ended'] as DocGroup[]).forEach((g) => {
+    if (g === 'ended' && !count(g)) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'es-filter';
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', String(g === docGroup));
+    b.textContent = `${names[g]} (${count(g)})`;
+    b.onclick = () => {
+      docGroup = g;
+      void renderSent();
+    };
+    filters.appendChild(b);
+  });
+
   host.textContent = '';
-  for (const s of list) {
+  const shown = items.filter((x) => x.group === docGroup);
+  if (!shown.length) {
+    const p = document.createElement('p');
+    p.className = 'es-sub es-empty';
+    p.textContent = items.length
+      ? docGroup === 'waiting'
+        ? 'Nothing is waiting for signatures right now.'
+        : 'Nothing here yet.'
+      : 'Nothing here yet. Documents you send for signature show up here, with who has signed.';
+    host.appendChild(p);
+    return;
+  }
+  for (const it of shown) {
     const item = document.createElement('div');
     item.className = 'es-env';
     item.innerHTML = `
@@ -1000,59 +1064,90 @@ async function renderSent(): Promise<void> {
         <div style="min-width:0"><div class="es-env-title"></div><div class="es-sub es-env-when"></div></div>
         <div class="es-row es-env-actions"></div>
       </div>
-      <div class="es-sendlist es-env-signers" style="margin-top:0.6rem"></div>`;
-    item.querySelector('.es-env-title')!.textContent = s.title;
-    item.querySelector('.es-env-when')!.textContent =
-      s.expires > Date.now() ? `Sent ${formatDate(s.createdAt)} · open to sign until ${formatDate(s.expires)}` : `Sent ${formatDate(s.createdAt)} · kept until ${formatDate(s.retainUntil || s.expires)}`;
+      <div class="es-env-more" hidden>
+        <div class="es-sendlist es-env-signers" style="margin-top:0.6rem"></div>
+        <div class="es-row es-env-tools" style="margin-top:0.6rem"></div>
+      </div>`;
+    item.querySelector('.es-env-title')!.textContent = it.s.title;
     host.appendChild(item);
-    void fillSent(item, s);
+    fillSent(item, it.s, it.state);
   }
 }
 
-async function fillSent(item: HTMLElement, s: Sent): Promise<void> {
+function names(list: string[]): string {
+  if (list.length <= 1) return list[0] || '';
+  if (list.length === 2) return `${list[0]} and ${list[1]}`;
+  return `${list.length} people`;
+}
+
+/** One document: a plain status line, the one or two things to do, and Details. */
+function fillSent(item: HTMLElement, s: Sent, state: State | null): void {
   const actions = item.querySelector<HTMLElement>('.es-env-actions')!;
+  const when = item.querySelector<HTMLElement>('.es-env-when')!;
+  const more = item.querySelector<HTMLElement>('.es-env-more')!;
+  const tools = item.querySelector<HTMLElement>('.es-env-tools')!;
   const signersHost = item.querySelector<HTMLElement>('.es-env-signers')!;
-  let state: State;
-  try {
-    state = await api.state(s.id, s.senderToken);
-  } catch (err) {
-    if ((err as ApiError).status === 404) {
-      actions.innerHTML = '<span class="es-chip">Expired or cancelled</span>';
-      const b = document.createElement('button');
-      b.className = 'es-btn es-small';
-      b.textContent = 'Remove';
-      b.onclick = async () => {
+  const button = (html: string, cls = '', onclick?: () => void): HTMLButtonElement => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `es-btn es-small ${cls}`.trim();
+    b.innerHTML = html;
+    if (onclick) b.onclick = onclick;
+    return b;
+  };
+  if (!state) {
+    when.textContent = 'Deleted. It is no longer on Paperhaus.';
+    actions.appendChild(
+      button('Remove from list', '', async () => {
         await deleteSent(s.id);
         void renderSent();
-      };
-      actions.appendChild(b);
-    } else actions.innerHTML = '<span class="es-chip es-bad">Could not load</span>';
+      })
+    );
     return;
   }
-  const signed = state.signers.filter((x) => x.signed).length;
-  const chip = document.createElement('span');
-  chip.className = 'es-chip' + (state.status === 'complete' ? ' es-good' : state.status === 'declined' ? ' es-bad' : '');
-  chip.textContent =
-    state.status === 'complete' ? (state.sealed ? 'Completed · sealed' : 'Completed') : state.status === 'declined' ? 'Declined' : state.status === 'expired' ? 'Time ran out' : `${signed} of ${state.n} signed`;
-  actions.appendChild(chip);
+  const signedCount = state.signers.filter((x) => x.signed).length;
+  const waitingFor = s.signers.map((x, i) => (state.signers[i].signed ? '' : isMe(s, i) ? 'you' : x.name)).filter(Boolean);
+  if (state.status === 'out') {
+    const next = s.ordered ? waitingFor.slice(0, 1) : waitingFor;
+    when.textContent = `Waiting for ${names(next)} · ${signedCount} of ${state.n} signed · sent ${formatDate(s.createdAt)}`;
+  } else if (state.status === 'complete') {
+    const last = Math.max(...state.signers.map((x) => (x.signed && x.signed.at) || 0));
+    when.textContent = `Signed by everyone · ${formatDate(last || s.createdAt)}`;
+  } else if (state.status === 'cancelled' && state.cancelled) {
+    when.textContent = `Cancelled · you can undo this until ${formatDate(state.cancelled.until)}`;
+  } else if (state.status === 'declined' && state.declined) {
+    when.textContent = `${s.signers[state.declined.index]?.name || 'Someone'} declined · ${formatDate(state.declined.at)}`;
+  } else if (state.status === 'expired') {
+    when.textContent = `Time ran out before everyone signed · ${formatDate(s.expires)}`;
+  }
 
-  if (state.status === 'complete') {
-    const dl = document.createElement('button');
-    dl.className = 'es-btn es-small es-primary';
-    dl.innerHTML = '<i class="ph ph-download-simple"></i> Signed PDF';
-    dl.onclick = () => void downloadSigned(s, state);
-    actions.appendChild(dl);
+  // The main things to do, right on the card.
+  if (state.status === 'complete') actions.appendChild(button('<i class="ph ph-download-simple"></i> Download signed PDF', 'es-primary', () => void downloadSigned(s, state)));
+  if (state.status === 'cancelled') {
+    actions.appendChild(
+      button('<i class="ph ph-arrow-counter-clockwise"></i> Undo', 'es-primary', async () => {
+        busy('Restoring...');
+        try {
+          await api.restore(s.id, s.senderToken);
+          toast('Restored. The signing links work again.');
+          docGroup = null;
+          void renderSent();
+        } catch (err) {
+          showAlert('Could not undo it', /too_late/.test(String((err as Error).message)) ? 'The 7 days to undo have passed.' : String((err as Error).message || err));
+        } finally {
+          busy(null);
+        }
+      })
+    );
+    actions.appendChild(button('Delete now', 'es-danger', () => void deleteNow(s)));
+    return;
   }
   if (state.status === 'out' && gmail.connected) {
-    // Who can be reminded now: not signed, not me, invited through Gmail; only the current
-    // person when the order is fixed.
     let waiting = s.signers.map((_, i) => i).filter((i) => !state.signers[i].signed);
     if (s.ordered) waiting = waiting.slice(0, 1);
     const targets = waiting.filter((i) => !isMe(s, i) && s.mailed && s.mailed[i]);
-    if (targets.length > 1) {
-      const all = document.createElement('button');
-      all.className = 'es-btn es-small';
-      all.innerHTML = `<i class="ph ph-bell-ringing"></i> Remind ${targets.length} people`;
+    if (targets.length) {
+      const all = button(`<i class="ph ph-bell-ringing"></i> ${targets.length > 1 ? `Remind ${targets.length} people` : 'Remind'}`);
       all.onclick = async () => {
         all.disabled = true;
         let ok = 0;
@@ -1064,30 +1159,29 @@ async function fillSent(item: HTMLElement, s: Sent): Promise<void> {
             /* counted below */
           }
         }
-        toast(ok === targets.length ? `Reminded ${ok} people` : `Reminded ${ok} of ${targets.length}`);
+        toast(ok === targets.length ? (ok > 1 ? `Reminded ${ok} people` : 'Reminder sent') : `Reminded ${ok} of ${targets.length}`);
         void renderSent();
       };
       actions.appendChild(all);
     }
   }
-  const rec = document.createElement('button');
-  rec.className = 'es-btn es-small';
-  rec.innerHTML = '<i class="ph ph-file-text"></i> Signing record';
-  rec.onclick = () => void showRecord(s);
-  actions.appendChild(rec);
-  const cancel = document.createElement('button');
-  cancel.className = 'es-btn es-small es-danger';
-  cancel.innerHTML = state.status === 'complete' ? '<i class="ph ph-trash"></i> Delete' : '<i class="ph ph-x"></i> Cancel';
-  cancel.onclick = () => void cancelSent(s, state.status === 'complete');
-  actions.appendChild(cancel);
+  const details = button('Details <i class="ph ph-caret-down"></i>');
+  details.setAttribute('aria-expanded', 'false');
+  details.onclick = () => {
+    more.hidden = !more.hidden;
+    details.setAttribute('aria-expanded', String(!more.hidden));
+    details.innerHTML = more.hidden ? 'Details <i class="ph ph-caret-down"></i>' : 'Hide details <i class="ph ph-caret-up"></i>';
+  };
+  actions.appendChild(details);
 
+  // Details: each person, the signing record, cancel or delete.
   s.signers.forEach((sig, i) => {
     const st = state.signers[i];
     const row = document.createElement('div');
     row.className = 'es-sendrow';
     const status = st.signed ? `Signed ${formatDate(st.signed.at, true)}` : st.viewed ? `Opened ${formatDate(st.viewed.at, true)}` : 'Not opened yet';
     row.innerHTML = `<div style="min-width:0"><div class="es-who-name"></div><div class="es-who-mail"></div></div>`;
-    row.querySelector('.es-who-name')!.textContent = `${s.ordered ? `${i + 1}. ` : ''}${sig.name}`;
+    row.querySelector('.es-who-name')!.textContent = `${s.ordered ? `${i + 1}. ` : ''}${sig.name}${isMe(s, i) ? ' (you)' : ''}`;
     row.querySelector('.es-who-mail')!.textContent = `${sig.email} · ${status}`;
     if (state.declined && state.declined.index === i) {
       const line = row.querySelector('.es-who-mail')!;
@@ -1104,46 +1198,51 @@ async function fillSent(item: HTMLElement, s: Sent): Promise<void> {
     if (!st.signed && state.status === 'out') row.appendChild(sendButtons(s, i, turn));
     signersHost.appendChild(row);
   });
+  if (state.status === 'complete') signersHost.appendChild(shareRow(s, state));
+  tools.appendChild(button('<i class="ph ph-file-text"></i> Signing record', '', () => void showRecord(s)));
+  tools.appendChild(
+    button(state.status === 'out' ? '<i class="ph ph-x"></i> Cancel request' : '<i class="ph ph-trash"></i> Delete', 'es-danger', () => void cancelSent(s, state.status !== 'out'))
+  );
+}
 
-  if (state.status === 'complete') {
-    // Everyone can get the finished copy from a read-only link.
-    const row = document.createElement('div');
-    row.className = 'es-sendrow';
-    row.innerHTML = '<div><div class="es-who-name">Send everyone the signed copy</div><div class="es-who-mail">A read-only link to the finished PDF</div></div>';
-    const link = signLink(s.id, fromB64(s.key), s.readToken);
-    const m = {
-      to: s.signers.map((x) => x.email).join(','),
-      subject: `Signed: ${s.title}`,
-      body: `Hi all,\n\nEveryone has signed "${s.title}". Download the signed PDF here:\n${link}\n\nThe link works until ${formatDate(state.retainUntil || s.expires)}.\n\n${s.fromName}`,
-    };
-    const l = composeLinks(m, s.from);
-    const btns = document.createElement('div');
-    btns.className = 'es-row';
-    btns.innerHTML = `
-      <a class="es-btn es-small" target="_blank" rel="noopener" href="${escapeHtml(l.gmail)}"><i class="ph ph-google-logo"></i> Gmail</a>
-      <a class="es-btn es-small" target="_blank" rel="noopener" href="${escapeHtml(l.outlook)}"><i class="ph ph-microsoft-outlook-logo"></i> Outlook</a>
-      <a class="es-btn es-small" href="${escapeHtml(l.app)}"><i class="ph ph-envelope-simple"></i> Email app</a>`;
-    if (gmail.connected) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'es-btn es-small es-primary';
-      b.innerHTML = '<i class="ph ph-paper-plane-tilt"></i> Send to everyone';
-      b.addEventListener('click', async () => {
-        b.disabled = true;
-        try {
-          await mailPost('/api/mail/send', { to: s.signers.map((x) => x.email), subject: m.subject, text: m.body, fromName: s.fromName, from: s.from });
-          toast('Sent everyone the signed copy');
-        } catch (err) {
-          showAlert('Could not send it', String((err as Error).message || err));
-        } finally {
-          b.disabled = false;
-        }
-      });
-      btns.prepend(b);
-    }
-    row.appendChild(btns);
-    signersHost.appendChild(row);
+/** "Send everyone the signed copy": a read-only link to the finished PDF. */
+function shareRow(s: Sent, state: State): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'es-sendrow';
+  row.innerHTML = '<div><div class="es-who-name">Send everyone the signed copy</div><div class="es-who-mail">A read-only link to the finished PDF</div></div>';
+  const link = signLink(s.id, fromB64(s.key), s.readToken);
+  const m = {
+    to: s.signers.map((x) => x.email).join(','),
+    subject: `Signed: ${s.title}`,
+    body: `Hi all,\n\nEveryone has signed "${s.title}". Download the signed PDF here:\n${link}\n\nThe link works until ${formatDate(state.retainUntil || s.expires)}.\n\n${s.fromName}`,
+  };
+  const l = composeLinks(m, s.from);
+  const btns = document.createElement('div');
+  btns.className = 'es-row';
+  btns.innerHTML = `
+    <a class="es-btn es-small" target="_blank" rel="noopener" href="${escapeHtml(l.gmail)}"><i class="ph ph-google-logo"></i> Gmail</a>
+    <a class="es-btn es-small" target="_blank" rel="noopener" href="${escapeHtml(l.outlook)}"><i class="ph ph-microsoft-outlook-logo"></i> Outlook</a>
+    <a class="es-btn es-small" href="${escapeHtml(l.app)}"><i class="ph ph-envelope-simple"></i> Email app</a>`;
+  if (gmail.connected) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'es-btn es-small es-primary';
+    b.innerHTML = '<i class="ph ph-paper-plane-tilt"></i> Send to everyone';
+    b.addEventListener('click', async () => {
+      b.disabled = true;
+      try {
+        await mailPost('/api/mail/send', { to: s.signers.map((x) => x.email), subject: m.subject, text: m.body, fromName: s.fromName, from: s.from });
+        toast('Sent everyone the signed copy');
+      } catch (err) {
+        showAlert('Could not send it', String((err as Error).message || err));
+      } finally {
+        b.disabled = false;
+      }
+    });
+    btns.prepend(b);
   }
+  row.appendChild(btns);
+  return row;
 }
 
 async function downloadSigned(s: Sent, state: State): Promise<void> {
@@ -1184,15 +1283,35 @@ async function showRecord(s: Sent): Promise<void> {
 
 async function cancelSent(s: Sent, done: boolean): Promise<void> {
   const ok = await confirmBox(
-    done ? 'Delete this request?' : 'Cancel this request?',
+    done ? 'Delete this document?' : 'Cancel this request?',
     done
-      ? 'The signed copy and its signing record are removed from Paperhaus now. Download them first if you need them.'
-      : 'The signing links stop working, and the document is deleted from Paperhaus.'
+      ? 'It is removed from Paperhaus. You can undo this for 7 days. Download the signed PDF first if you need a copy.'
+      : 'The signing links stop working right away. You can undo this for 7 days, then it is deleted.'
   );
+  if (!ok) return;
+  busy(done ? 'Deleting...' : 'Cancelling...');
+  try {
+    await api.cancel(s.id, s.senderToken);
+    toast(done ? 'Deleted. You can undo it under Cancelled or ended.' : 'Cancelled. You can undo it under Cancelled or ended.');
+    docGroup = 'ended';
+    void renderSent();
+  } catch (err) {
+    if ((err as ApiError).status === 404) {
+      await deleteSent(s.id);
+      void renderSent();
+    } else showAlert('Could not do that', String((err as Error).message || err));
+  } finally {
+    busy(null);
+  }
+}
+
+/** Delete a cancelled request for good, before the 7 days are up. */
+async function deleteNow(s: Sent): Promise<void> {
+  const ok = await confirmBox('Delete it for good?', 'It is removed from Paperhaus now and cannot be brought back.');
   if (!ok) return;
   busy('Deleting...');
   try {
-    await api.cancel(s.id, s.senderToken).catch((e: ApiError) => {
+    await api.cancel(s.id, s.senderToken, true).catch((e: ApiError) => {
       if (e.status !== 404) throw e;
     });
     await deleteSent(s.id);
@@ -1208,7 +1327,7 @@ function confirmBox(title: string, text: string): Promise<boolean> {
   return new Promise((resolve) => {
     const wrap = document.createElement('div');
     wrap.className = 'es-modal-wrap';
-    wrap.innerHTML = `<div class="es-modal" role="dialog" aria-modal="true"><h3 class="es-h2"></h3><p class="es-sub" style="margin-bottom:1rem"></p><div class="es-row" style="justify-content:flex-end"><button class="es-btn" data-v="0" type="button">Keep it</button><button class="es-btn es-primary" data-v="1" type="button">Yes</button></div></div>`;
+    wrap.innerHTML = `<div class="es-modal" role="dialog" aria-modal="true"><h3 class="es-h2"></h3><p class="es-sub" style="margin-bottom:1rem"></p><div class="es-row" style="justify-content:flex-end"><button class="es-btn" data-v="0" type="button">No, keep it</button><button class="es-btn es-primary" data-v="1" type="button">Yes</button></div></div>`;
     wrap.querySelector('h3')!.textContent = title;
     wrap.querySelector('p')!.textContent = text;
     wrap.addEventListener('click', (e) => {
@@ -1229,6 +1348,7 @@ function resetDraft(): void {
   draft.signers = [];
   $('es-drop').classList.remove('hidden');
   $('es-doc').classList.add('hidden');
+  $('es-newflow').classList.add('es-nodoc');
   $<HTMLInputElement>('es-title').value = '';
   $<HTMLTextAreaElement>('es-message').value = '';
   $('es-pages').innerHTML = '<p class="es-sub">Choose a PDF first.</p>';
@@ -1333,6 +1453,9 @@ function init(): void {
     pulled = false;
     void renderSent();
   });
+  document.querySelectorAll<HTMLElement>('.es-tab').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab === 'docs' ? 'docs' : 'new')));
+  window.addEventListener('hashchange', () => showTab(location.hash === '#documents' ? 'docs' : 'new', false));
+  showTab(location.hash === '#documents' ? 'docs' : 'new', false);
   let resizeTimer = 0;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);

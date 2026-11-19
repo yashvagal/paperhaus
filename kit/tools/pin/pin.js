@@ -60,6 +60,11 @@
     bar = el('div', { id: 'ph-bar', class: 'ph-bar' });
     row.appendChild(bar);
 
+    // On computers (phones have the tab bar): one click to everything you made or sent.
+    var docs = el('a', { href: '/my-documents.html', class: 'ph-docs-link', id: 'ph-docs-link' },
+      '<i class="ph ph-folder-simple" aria-hidden="true"></i><span>My documents</span>');
+    bar.appendChild(docs);
+
     pinBtn = el('button', { type: 'button', class: 'ph-pin', id: 'ph-pin', hidden: '' },
       '<i class="ph ph-push-pin" aria-hidden="true"></i><span>' + (isIOS || isAndroid ? 'Add to home screen' : 'Pin app') + '</span>');
     pinBtn.addEventListener('click', onPin);
@@ -228,6 +233,8 @@
       who.appendChild(el('strong', {})).textContent = name;
       who.appendChild(el('span', {})).textContent = id.email;
       menu.appendChild(who);
+      menu.appendChild(el('a', { href: '/my-documents.html', role: 'menuitem', class: 'ph-menu-item' },
+        '<i class="ph ph-folder-simple" aria-hidden="true"></i> My documents'));
       var site = document.querySelector('meta[name="paperhaus-site"]');
       var siteUrl = site && site.getAttribute('content');
       if (siteUrl && /^https?:\/\//i.test(siteUrl)) {

@@ -26,7 +26,8 @@
  *   POST /api/esign/p/:id/view?t=       record that a signer opened it
  *   POST /api/esign/p/:id/sign?t=       a signer submits (body: encrypted values)
  *   POST /api/esign/p/:id/decline?t=    a signer declines (body: encrypted reason, optional)
- *   POST /api/esign/p/:id/cancel?t=     the sender cancels and deletes it
+ *   POST /api/esign/p/:id/cancel?t=     the sender cancels it (body { now: true } deletes it at once)
+ *   POST /api/esign/p/:id/restore?t=    the sender undoes a cancel (within UNDO_DAYS)
  *   POST /api/esign/p/:id/seal?t=       seal a finished PDF (body: JSON { digest: hex })
  *   POST /api/esign/p/:id/final?t=      store the sealed copy (body: encrypted PDF, x-fingerprint header)
  *   GET  /api/esign/p/:id/final?t=      the sealed copy (encrypted)
@@ -34,6 +35,10 @@
  * The /p/ routes are public (Access bypass) and need a token from a signing link: each
  * signer has their own, the sender has one, and a read-only one opens the finished copy.
  * Only SHA-256 hashes of the tokens are stored.
+ *
+ * Cancelling is undoable: the request is marked cancelled (signing links stop working at
+ * once) and everything is deleted UNDO_DAYS later by purgeCancelled(), which the hourly
+ * reminders run calls. A marker `cx:<id>` says when.
  */
 
 import { sealDigest, b64 as b64u8 } from '../../_shared/seal.js';
@@ -41,6 +46,7 @@ import { getRequestMail, mailConfigured, sendMail } from '../../_shared/gmail.js
 import { runReminders } from '../../_shared/reminders.js';
 
 const DAYS = 14; // time to sign
+const UNDO_DAYS = 7; // a cancelled request can be restored for this long
 const KEEP = [14, 365, 2555]; // how long the signed record is kept: 14 days, 1 year, 7 years
 const MAX_SIGNERS = 10;
 const MAX_DOC = 20 * 1024 * 1024; // KV values max out at 25 MiB
@@ -59,7 +65,11 @@ export async function onRequest(context) {
     // Signing reminders (functions/_shared/reminders.js). Public on purpose (under the signing
     // page's public path) so the hourly schedule can call it: it only sends reminders that are
     // due, and runs at most every 15 minutes however often it is called.
-    if (parts[0] === 'p' && parts[1] === 'run-reminders' && parts.length === 2) return json(await runReminders(env));
+    if (parts[0] === 'p' && parts[1] === 'run-reminders' && parts.length === 2) {
+      const report = await runReminders(env);
+      if (!report.skipped || report.skipped === 'not_configured') report.purged = await purgeCancelled(env);
+      return json(report);
+    }
     if (parts[0] === 'p' && parts[1] && isId(parts[1])) {
       const id = parts[1];
       const action = parts[2] || '';
@@ -69,6 +79,8 @@ export async function onRequest(context) {
       if (!meta) return json({ error: 'not_found' }, 404);
       const who = await role(meta, token);
       if (!who) return json({ error: 'forbidden' }, 403);
+      // A cancelled request is gone for everyone but the sender, who can still undo it.
+      if (meta.status === 'cancelled' && who.role !== 'sender') return json({ error: 'not_found' }, 404);
 
       if (method === 'GET' && action === '') {
         if (who.role === 'sender' && mailConfigured(env)) context.waitUntil(runReminders(env).catch(() => null));
@@ -83,7 +95,8 @@ export async function onRequest(context) {
         if (res.ok && mailConfigured(env)) context.waitUntil(notify(env, id, action, who.index, res.clone(), url.origin));
         return res;
       }
-      if (method === 'POST' && action === 'cancel') return await cancel(env, id, meta, who);
+      if (method === 'POST' && action === 'cancel') return await cancel(request, env, id, meta, who);
+      if (method === 'POST' && action === 'restore') return await restore(env, id, meta, who);
       if (method === 'POST' && action === 'seal') return await seal(request, env, id, meta);
       if (method === 'POST' && action === 'final') return await storeFinal(request, env, id, meta, who);
       if (method === 'GET' && action === 'final') return bytes(await env.ESIGN.get(`f:${id}`, 'arrayBuffer'));
@@ -163,6 +176,7 @@ async function state(env, id, meta, who, withEnvelope) {
     expires: meta.expires,
     status: meta.status === 'out' && done ? 'complete' : expired ? 'expired' : meta.status,
     declined: meta.declined || null,
+    cancelled: meta.cancelled ? { at: meta.cancelled.at, until: meta.cancelled.until } : null,
     signers,
     keep: meta.keep || DAYS,
     retainUntil: retainUntil(meta),
@@ -235,12 +249,55 @@ async function decline(request, env, id, meta, who) {
   return json(await state(env, id, meta, who, false));
 }
 
-async function cancel(env, id, meta, who) {
+async function cancel(request, env, id, meta, who) {
   if (who.role !== 'sender') return json({ error: 'not_the_sender' }, 403);
-  const keys = [`m:${id}`, `d:${id}`, `e:${id}`, `a:${id}`, `f:${id}`, `ml:${id}`];
+  const body = await request.json().catch(() => ({}));
+  if (body && body.now) {
+    await purge(env, id, meta);
+    return json({ ok: true, deleted: true });
+  }
+  if (meta.status === 'cancelled') return json({ ok: true, until: meta.cancelled.until });
+  const at = Date.now();
+  const until = Math.min(at + UNDO_DAYS * 86400000, retainUntil(meta));
+  meta.cancelled = { at, until, prev: meta.status };
+  meta.status = 'cancelled';
+  await env.ESIGN.put(`m:${id}`, JSON.stringify(meta), { expiration: exp(meta) });
+  await env.ESIGN.put(`cx:${id}`, '1', { expiration: Math.max(Math.floor(until / 1000) + 86400, Math.floor(at / 1000) + 120), metadata: { purgeAt: until } });
+  return json({ ok: true, until });
+}
+
+async function restore(env, id, meta, who) {
+  if (who.role !== 'sender') return json({ error: 'not_the_sender' }, 403);
+  if (meta.status !== 'cancelled') return json({ ok: true });
+  if (Date.now() > meta.cancelled.until) return json({ error: 'too_late' }, 409);
+  meta.status = meta.cancelled.prev || 'out';
+  delete meta.cancelled;
+  await env.ESIGN.put(`m:${id}`, JSON.stringify(meta), { expiration: exp(meta) });
+  await env.ESIGN.delete(`cx:${id}`);
+  return json({ ok: true });
+}
+
+async function purge(env, id, meta) {
+  const keys = [`m:${id}`, `d:${id}`, `e:${id}`, `a:${id}`, `f:${id}`, `ml:${id}`, `cx:${id}`, `rm:${id}`];
   for (let i = 0; i < meta.n; i++) keys.push(`s:${id}:${i}`, `v:${id}:${i}`);
   await Promise.all(keys.map((k) => env.ESIGN.delete(k)));
-  return json({ ok: true });
+}
+
+/** Delete cancelled requests whose undo time has passed (called by the hourly run). */
+export async function purgeCancelled(env) {
+  const now = Date.now();
+  const list = await env.ESIGN.list({ prefix: 'cx:', limit: 200 });
+  let purged = 0;
+  for (const k of list.keys) {
+    if (((k.metadata && k.metadata.purgeAt) || 0) > now) continue;
+    const id = k.name.slice(3);
+    const meta = await env.ESIGN.get(`m:${id}`, 'json');
+    if (meta && meta.status === 'cancelled') {
+      await purge(env, id, meta);
+      purged++;
+    } else await env.ESIGN.delete(k.name);
+  }
+  return purged;
 }
 
 async function seal(request, env, id, meta) {
@@ -352,7 +409,7 @@ async function notify(env, id, action, index, res, origin) {
     const first = (n) => String(n || '').split(/\s+/)[0] || 'there';
     const title = rec.title;
     const from = rec.senderName;
-    const manage = `${origin}/request-signatures.html`;
+    const manage = `${origin}/request-signatures.html#documents`;
     const signedCount = (st.signers || []).filter((x) => x.signed).length;
     const jobs = [];
     const toOwner = (subject, text) => {

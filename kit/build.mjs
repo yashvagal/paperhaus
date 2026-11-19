@@ -365,6 +365,18 @@ const entry = (page, name, icon, subtitle) => `      {
         subtitle: '${subtitle}',
       },
 `;
+// My documents: every file made with Paperhaus (kit/tools/pin/flow.js keeps them, synced
+// to the account), grouped by the tool that made it, plus documents sent for signature.
+const DOCS_TOOL = {
+  name: 'My documents',
+  dir: join(KIT, 'tools', 'docs'),
+  pages: ['my-documents'],
+  files: [
+    ['my-documents.html', 'src/pages/my-documents.html'],
+    ['documents-page.js', 'src/js/logic/kit-docs/documents-page.js'],
+    ['documents.css', 'src/js/logic/kit-docs/documents.css'],
+  ],
+};
 const categoryAnchor = (name) => `    name: '${name}',\n    tools: [\n`;
 const MORE_TOOL = {
   name: 'PowerPoint, HTML, Redact, Summarize, Translate',
@@ -411,8 +423,26 @@ const KIT_TOOLS = [
   { ...SCAN_TOOL, name: 'Scan', pages: [SCAN_TOOL.page] },
   ESIGN_TOOL,
   MORE_TOOL,
+  DOCS_TOOL,
 ];
-const KIT_LOGIC_DIRS = ['src/js/logic/kit-scan', 'src/js/logic/kit-esign', 'src/js/logic/kit-more'];
+const KIT_LOGIC_DIRS = ['src/js/logic/kit-scan', 'src/js/logic/kit-esign', 'src/js/logic/kit-more', 'src/js/logic/kit-docs'];
+
+// The search box on every page (kit/tools/pin/flow.js) reads /tools-index.json: each tool's
+// page, name, words and icon, taken from the tool list as built (BentoPDF's plus the kit's).
+let TOOL_INDEX = [];
+function toolIndex(src) {
+  const out = [];
+  const seen = new Set();
+  const re = /href:\s*import\.meta\.env\.BASE_URL\s*\+\s*'([^']+)',\s*name:\s*'((?:[^'\\]|\\.)*)',\s*icon:\s*'([^']+)',\s*subtitle:\s*'((?:[^'\\]|\\.)*)'/g;
+  let m;
+  while ((m = re.exec(src))) {
+    const [, href, name, icon, sub] = m;
+    if (seen.has(href)) continue;
+    seen.add(href);
+    out.push({ href, name: name.replace(/\\'/g, "'"), icon, sub: sub.replace(/\\'/g, "'") });
+  }
+  return out;
+}
 
 function installKitTools() {
   const vite = readFileSync(VITE_CONFIG, 'utf8');
@@ -467,6 +497,7 @@ function installKitTools() {
     else next = next.replace(a, `${a}      // [phase0-kit]\n${item}`);
   }
   writeFileSync(TOOLS_CONFIG, next);
+  TOOL_INDEX = toolIndex(next);
   ensureKitPackages();
   log(`Added the Paperhaus tools (temporary): ${KIT_TOOLS.map((t) => t.name).join(', ')}.`);
   return undo;
@@ -614,14 +645,14 @@ const withEm = (t) => escapeHtml(t).replace(/\*([^*]+)\*/g, '<em>$1</em>');
 // files and pinned tools, written into BentoPDF's header block. kit/tools/pin/home.js
 // makes it work; the full tool list stays below it under "All tools".
 const HOME_TASKS = [
-  ['request-signatures.html', 'ph-signature', 'Sign', 'Sign yourself, or send to others to sign. Sealed and recorded.'],
-  ['#edit', 'ph-pencil-simple-line', 'Edit', 'Text, images, notes, highlights and form fields.'],
-  ['pdf-multi-tool.html', 'ph-squares-four', 'Pages', 'Merge, reorder, rotate, delete, extract and split.'],
-  ['#convert', 'ph-arrows-left-right', 'Convert', 'To and from PDF. Word, Excel, PowerPoint, images, web pages.'],
-  ['compress-pdf.html', 'ph-arrows-in', 'Compress', 'Make files smaller for email, with a quality you choose.'],
-  ['#secure', 'ph-shield-check', 'Secure and redact', 'Passwords, permissions, black out details, remove hidden data.'],
-  ['scan-document.html', 'ph-scan', 'Scan', 'Use your phone camera. Pages are cropped and straightened.'],
-  ['#ai', 'ph-sparkle', 'AI on this device', 'Summarize, translate, find text in scans. Nothing is uploaded.'],
+  ['request-signatures.html', 'ph-signature', 'Sign', 'Sign it yourself, or send it to others to sign.'],
+  ['#edit', 'ph-pencil-simple-line', 'Edit', 'Change text, add images, notes or highlights, fill in forms.'],
+  ['pdf-multi-tool.html', 'ph-squares-four', 'Combine or split', 'Merge files, reorder, rotate, delete or pull out pages.'],
+  ['#convert', 'ph-arrows-left-right', 'Convert', 'Turn Word, Excel, PowerPoint or photos into PDF, and back.'],
+  ['compress-pdf.html', 'ph-arrows-in', 'Make smaller', 'Shrink a PDF so it is easy to email.'],
+  ['#secure', 'ph-shield-check', 'Protect', 'Add a password, or black out private details.'],
+  ['scan-document.html', 'ph-scan', 'Scan', 'Take photos of paper pages and get a clean PDF.'],
+  ['#ai', 'ph-sparkle', 'Summarize or translate', 'Get a summary, translate it, or find text in a scan.'],
 ];
 
 function homeMarkup(env) {
@@ -638,23 +669,23 @@ function homeMarkup(env) {
     '<h2 hidden></h2><p hidden></p>' +
     `<section id="ph-home" class="ph-home">` +
     `<div class="ph-eyebrow">${eyebrow}</div><h1 class="ph-title">${title}</h1>` +
+    `<button type="button" id="ph-home-search" class="ph-home-search"><i class="ph ph-magnifying-glass" aria-hidden="true"></i><span>Search tools and your documents</span><kbd>/</kbd></button>` +
     `<div id="ph-drop" class="ph-drop">` +
     `<i class="ph ph-upload-simple ph-drop-icon" aria-hidden="true"></i>` +
     `<div class="ph-drop-title">Drop any file here</div>` +
-    `<div class="ph-drop-sub">PDF, Word, Excel, PowerPoint or photos. Paperhaus suggests what to do with it.</div>` +
+    `<div class="ph-drop-sub">A PDF, Word, Excel, PowerPoint file or photos. We'll show you what you can do with it.</div>` +
     `<div class="ph-drop-actions"><button type="button" id="ph-choose" class="ph-btn ph-btn-main"><i class="ph ph-folder-open" aria-hidden="true"></i> Choose a file</button>` +
     `<a href="scan-document.html" class="ph-btn"><i class="ph ph-scan" aria-hidden="true"></i> Scan with camera</a></div>` +
-    `<form id="ph-url" class="ph-url"><i class="ph ph-globe-simple" aria-hidden="true"></i><input type="url" inputmode="url" placeholder="Paste a web page link" aria-label="Web page link to make a PDF"><button type="submit" class="ph-btn">Make PDF</button></form>` +
     `<input type="file" id="ph-file" multiple hidden>` +
     (note ? `<div class="ph-note">${note}</div>` : '') +
     `</div>` +
     `<div id="ph-suggest" class="ph-suggest" hidden></div>` +
-    `<div class="ph-sec-head"><h2>Or pick a task</h2><a id="ph-all-link" href="#all-tools">See all tools</a></div>` +
+    `<div class="ph-sec-head"><h2>Or choose what to do</h2><a id="ph-all-link" href="#all-tools">See all tools</a></div>` +
     `<div class="ph-tasks">${tasks}</div>` +
     `<div class="ph-lists">` +
-    `<div class="ph-card" id="ph-recent"><div class="ph-card-head"><h2>Recent files</h2><span>On all your devices</span></div><div id="ph-recent-list"></div></div>` +
-    `<div class="ph-card" id="ph-pins"><div class="ph-card-head"><h2>Pinned tools</h2><span>Star a tool to pin it</span></div><div id="ph-pins-list" class="ph-pins-list"></div>` +
-    `<p class="ph-card-foot">Everything you open, convert or sign is processed in this browser. Signing requests are encrypted before they leave it.</p></div>` +
+    `<div class="ph-card" id="ph-recent"><div class="ph-card-head"><h2>Recent files</h2><a href="my-documents.html">See all</a></div><div id="ph-recent-list"></div></div>` +
+    `<div class="ph-card" id="ph-sent"><div class="ph-card-head"><h2>Sent for signature</h2><a href="request-signatures.html#documents">See all</a></div><div id="ph-sent-list"><p class="ph-muted">Loading...</p></div></div>` +
+    `<div class="ph-card" id="ph-pins" hidden><div class="ph-card-head"><h2>Pinned tools</h2><span>Tools you starred</span></div><div id="ph-pins-list" class="ph-pins-list"></div></div>` +
     `</div></section>` +
     `<div id="ph-hubbar" class="ph-hubbar" hidden><button type="button" id="ph-hub-back" class="ph-linkbtn"><i class="ph ph-arrow-left" aria-hidden="true"></i> Home</button><h2></h2><p></p></div>` +
     `<h2 id="all-tools" class="ph-all-title">All tools</h2>` +
@@ -749,6 +780,10 @@ const PIN_MARK = 'data-paperhaus-pin';
 
 // Plain pages anyone can open (no sign-in), such as privacy.html, which Google asks for
 // before Gmail sending can be switched on. Copied as is from kit/public/.
+function writeToolIndex() {
+  if (TOOL_INDEX.length) writeFileSync(join(DIST, 'tools-index.json'), JSON.stringify(TOOL_INDEX));
+}
+
 function copyPublicPages() {
   const src = join(KIT, 'public');
   if (!existsSync(src)) return;
@@ -839,7 +874,7 @@ const TABBAR = [
   ['/scan-document.html', 'ph-scan', 'Scan', /^\/scan-document/],
   ['/request-signatures.html', 'ph-signature', 'Sign', /^\/(request-signatures|sign-pdf)/],
   ['/#all-tools', 'ph-squares-four', 'Tools', null],
-  ['/#ph-recent', 'ph-clock-counter-clockwise', 'Recent', null],
+  ['/my-documents.html', 'ph-folder-simple', 'Documents', /^\/my-documents/],
 ];
 function withTabbar(html, path) {
   if (!/<body[\s>]/i.test(html)) return html;
@@ -1023,6 +1058,7 @@ try {
 fetchEngines(versions, env, urls);
 splitLargeFiles();
 copyPublicPages();
+writeToolIndex();
 applyTheme(env);
 addPinning(env);
 writeHeaders();

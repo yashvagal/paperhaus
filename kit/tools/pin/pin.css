@@ -200,3 +200,23 @@
   font-size: 0.85rem;
   color: var(--muted, #9ca3af);
 }
+.ph-docs-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 2.4rem;
+  padding: 0 0.95rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--text, #f3f4f6);
+  background: var(--surface, #1f2937);
+  box-shadow: var(--shadow-card, 0 0 0 1px #374151);
+  white-space: nowrap;
+  text-decoration: none;
+}
+@media (max-width: 640px) {
+  .ph-docs-link {
+    display: none;
+  }
+}

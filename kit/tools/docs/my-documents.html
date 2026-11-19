@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>My documents | BentoPDF</title>
+    <meta name="description" content="Your files and the documents you sent for signature, on all your devices." />
+    <link rel="icon" type="image/svg+xml" href="/images/favicon.svg" />
+    <link href="/src/css/styles.css" rel="stylesheet" />
+  </head>
+  <body class="antialiased bg-gray-900">
+    {{> navbar }}
+
+    <main class="dc-wrap">
+      <h1 class="dc-h1">My documents</h1>
+      <p class="dc-sub">Files you made with Paperhaus and documents you sent for signature, on all your devices.</p>
+
+      <div class="dc-search">
+        <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+        <input id="dc-search" type="search" placeholder="Find a document by name" aria-label="Find a document by name" />
+      </div>
+
+      <div id="dc-filters" class="dc-filters" role="tablist" aria-label="Show"></div>
+
+      <section class="dc-card" id="dc-sign-card">
+        <div class="dc-card-head">
+          <h2><i class="ph ph-signature" aria-hidden="true"></i> Sent for signature</h2>
+          <a href="request-signatures.html#documents">Open in Sign</a>
+        </div>
+        <div id="dc-sign"></div>
+      </section>
+
+      <div id="dc-groups"></div>
+
+      <p class="dc-foot">Your newest 30 files are kept, up to 24 MB each. They are encrypted before they leave your device. Turn syncing on or off on the home page, under Recent files.</p>
+    </main>
+
+    <div id="dc-toast" class="dc-toast" hidden role="status" aria-live="polite"></div>
+
+    {{> footer }}
+    <script type="module" src="/src/js/utils/lucide-init.ts"></script>
+    <script type="module" src="/src/js/utils/simple-mode-footer.ts"></script>
+    <script type="module" src="/src/js/logic/kit-docs/documents-page.js"></script>
+    <script type="module" src="/src/js/mobileMenu.ts"></script>
+    <script type="module" src="/src/js/main.ts"></script>
+  </body>
+</html>

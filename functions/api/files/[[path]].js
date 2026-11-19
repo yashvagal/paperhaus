@@ -25,7 +25,7 @@
  * day), so each account keeps its newest MAX_FILES files under MAX_BYTES.
  * Behind the Paperhaus sign-in: Cloudflare Access sets the signed-in email header.
  */
-const MAX_FILES = 12;
+const MAX_FILES = 30;
 const MAX_FILE_BYTES = 24 * 1024 * 1024;
 const MAX_BYTES = 150 * 1024 * 1024;
 const RECORD_KINDS = ['sent'];

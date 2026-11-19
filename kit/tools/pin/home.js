@@ -223,7 +223,9 @@
     var text = (e.clipboardData && e.clipboardData.getData('text')) || '';
     if (/^https?:\/\/\S+$/i.test(text.trim())) location.href = '/html-to-pdf.html?url=' + encodeURIComponent(text.trim());
   });
-  $('#ph-url').addEventListener('submit', function (e) {
+  var urlForm = $('#ph-url');
+  if (urlForm)
+    urlForm.addEventListener('submit', function (e) {
     e.preventDefault();
     var v = $('#ph-url input').value.trim();
     if (!v) return;
@@ -317,7 +319,7 @@
     text.appendChild(el('strong', '', on ? 'Syncing across your devices' : 'Sync across your devices'));
     text.appendChild(
       el('span', '', on
-        ? 'Your newest 12 files (up to 24 MB each) follow your sign-in. They are encrypted before they leave this device.'
+        ? 'Your newest 30 files (up to 24 MB each) follow your sign-in. They are encrypted before they leave this device.'
         : 'Sync is off, so these files stay on this device. Turn it on to see them on your phone and computer.')
     );
     box.appendChild(text);
@@ -390,7 +392,88 @@
       host.appendChild(a);
       shown++;
     });
-    if (!shown) host.appendChild(el('p', 'ph-muted', 'Star any tool in the list below to keep it here.'));
+    // The card shows only once something is starred.
+    var card = $('#ph-pins');
+    if (card) card.hidden = !shown;
+  }
+
+  // ---------------------------------------------------------------- sent for signature
+  // The last few requests sent from this account (this browser plus the account's synced
+  // list), with where each stands. Details and actions are on the Sign page.
+  function renderSentHome() {
+    var host = $('#ph-sent-list');
+    if (!host || !flow || !flow.localSent) return;
+    Promise.all([flow.localSent(), flow.listRecords ? flow.listRecords('sent').catch(function () { return []; }) : []])
+      .then(function (both) {
+        var byId = {};
+        var gone = {};
+        both[1].forEach(function (r) {
+          if (r && r.gone) gone[r.id] = 1;
+          else if (r && r.id && r.senderToken) byId[r.id] = r;
+        });
+        both[0].forEach(function (r) {
+          if (r && r.id) byId[r.id] = r;
+        });
+        var now = Date.now();
+        var list = Object.keys(byId)
+          .map(function (k) {
+            return byId[k];
+          })
+          .filter(function (s) {
+            return !gone[s.id] && (s.retainUntil || s.expires || 0) > now;
+          })
+          .sort(function (a, b) {
+            return (b.createdAt || 0) - (a.createdAt || 0);
+          })
+          .slice(0, 4);
+        host.textContent = '';
+        if (!list.length) {
+          host.appendChild(el('p', 'ph-muted', 'Nothing sent yet. Send a PDF to someone to sign and you can follow it here.'));
+          var go = el('a', 'ph-btn ph-sent-go', 'Send a PDF for signature');
+          go.href = 'request-signatures.html';
+          host.appendChild(go);
+          return;
+        }
+        list.forEach(function (s) {
+          var row = el('a', 'ph-recent-row ph-sent-row');
+          row.href = 'request-signatures.html#documents';
+          var dot = el('span', 'ph-sent-dot');
+          row.appendChild(dot);
+          var info = el('div', 'ph-recent-info');
+          info.appendChild(el('strong', '', s.title || 'Document'));
+          var line = el('span', '', 'Checking...');
+          info.appendChild(line);
+          row.appendChild(info);
+          host.appendChild(row);
+          fetch('/api/esign/p/' + encodeURIComponent(s.id) + '?t=' + encodeURIComponent(s.senderToken), { cache: 'no-store' })
+            .then(function (r) {
+              if (r.status === 404) return { status: 'gone' };
+              return r.json();
+            })
+            .then(function (st) {
+              var n = st.n || (s.signers || []).length;
+              var done = (st.signers || []).filter(function (x) {
+                return x.signed;
+              }).length;
+              var text = {
+                complete: 'Signed by everyone',
+                out: 'Waiting · ' + done + ' of ' + n + ' signed',
+                cancelled: 'Cancelled · you can undo it',
+                declined: 'Declined',
+                expired: 'Time ran out',
+                gone: 'Deleted',
+              }[st.status] || '';
+              line.textContent = text;
+              dot.className = 'ph-sent-dot is-' + (st.status || 'gone');
+            })
+            .catch(function () {
+              line.textContent = '';
+            });
+        });
+      })
+      .catch(function () {
+        host.textContent = '';
+      });
   }
 
   // ---------------------------------------------------------------- hubs
@@ -464,6 +547,25 @@
   });
 
   renderRecent();
+  renderSentHome();
+  var homeSearch = $('#ph-home-search');
+  if (homeSearch)
+    homeSearch.addEventListener('click', function () {
+      if (flow && flow.openSearch) flow.openSearch();
+    });
+  // From My documents: "Open" shows what you can do with that file.
+  (function () {
+    var params = new URLSearchParams(location.search);
+    var id = params.get('ph-open');
+    if (!id || !flow) return;
+    params.delete('ph-open');
+    history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params : '') + location.hash);
+    flow.getAny(id).then(function (rec) {
+      if (!rec || !rec.blob) return;
+      offer([new File([rec.blob], rec.name, { type: rec.type })], [rec]);
+      window.scrollTo({ top: home.getBoundingClientRect().top + window.scrollY - 80, behavior: 'smooth' });
+    });
+  })();
   // Check the account's sync setting (it may have been turned on from another device).
   if (flow && flow.syncStatus) {
     var was = flow.syncCached();

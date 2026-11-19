@@ -16,7 +16,7 @@
   'use strict';
 
   var DB = 'paperhaus-flow';
-  var MAX_FILES = 12;
+  var MAX_FILES = 30;
   var MAX_BYTES = 200 * 1024 * 1024;
 
   // ---------------------------------------------------------------- storage
@@ -114,6 +114,18 @@
     });
   }
 
+  /** Forget one file, here and in the account. */
+  function removeFile(id) {
+    var local = tx('readwrite', function (s) {
+      s.delete(id);
+    });
+    var remote = syncCached()
+      ? fetch('/api/files/' + encodeURIComponent(id), { method: 'DELETE', credentials: 'same-origin' }).catch(function () {})
+      : null;
+    statusP = null;
+    return Promise.all([local, remote]);
+  }
+
   /** Empties Recent here, and the synced copies too when sync is on. */
   function clear() {
     var local = tx('readwrite', function (s) {
@@ -128,6 +140,7 @@
   // ---------------------------------------------------------------- sync across devices
 
   var SYNC_LIMIT = 24 * 1024 * 1024 - 64;
+  var SYNC_FILES = 30;
   var enc = new TextEncoder();
   var dec = new TextDecoder();
   var keyP = null;
@@ -331,12 +344,12 @@
         there[f.id] = 1;
         oldest = Math.min(oldest, f.at);
       });
-      var room = 12 - st.files.length;
+      var room = SYNC_FILES - st.files.length;
       return list().then(function (all) {
         var todo = all.filter(function (r) {
           return r.kept && !there[r.id] && r.size <= SYNC_LIMIT && (room > 0 || r.at > oldest);
         });
-        todo = todo.slice(0, 12);
+        todo = todo.slice(0, SYNC_FILES);
         if (!todo.length) return;
         return todo.reverse().reduce(function (p, r) {
           return p.then(function () {
@@ -766,12 +779,231 @@
     putRecord: putRecord,
     deleteRecord: deleteRecord,
     listRecords: listRecords,
+    localSent: localSent,
+    removeFile: removeFile,
+    openSearch: openSearch,
     syncLimit: SYNC_LIMIT,
   };
+
+  // ---------------------------------------------------------------- search everything
+  // One search box (header button, or press /) for tools, your files and the documents
+  // you sent for signature. Tools come from /tools-index.json, written by kit/build.mjs.
+  var toolsP = null;
+  function toolList() {
+    if (!toolsP) {
+      toolsP = fetch('/tools-index.json', { credentials: 'same-origin' })
+        .then(function (r) {
+          return r.ok ? r.json() : [];
+        })
+        .catch(function () {
+          toolsP = null;
+          return [];
+        });
+    }
+    return toolsP;
+  }
+  var SYNONYMS = { shrink: 'compress', smaller: 'compress', combine: 'merge', join: 'merge', signature: 'sign', esign: 'sign', picture: 'image', photo: 'image', jpg: 'jpg', word: 'word', excel: 'excel', lock: 'password', unlock: 'password', hide: 'redact', 'black out': 'redact' };
+  function terms(q) {
+    q = String(q || '').toLowerCase().trim();
+    Object.keys(SYNONYMS).forEach(function (k) {
+      if (q.indexOf(k) !== -1) q += ' ' + SYNONYMS[k];
+    });
+    return q.split(/\s+/).filter(Boolean);
+  }
+  function score(text, words) {
+    text = String(text || '').toLowerCase();
+    var hit = 0;
+    words.forEach(function (w) {
+      if (text.indexOf(w) !== -1) hit++;
+    });
+    return hit;
+  }
+
+  var searchBox = null;
+  function openSearch() {
+    if (searchBox) return;
+    var wrap = el('div', 'ph-search-wrap');
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.setAttribute('aria-label', 'Search');
+    var panel = el('div', 'ph-search');
+    var row = el('div', 'ph-search-row');
+    row.innerHTML = '<i class="ph ph-magnifying-glass" aria-hidden="true"></i>';
+    var input = el('input', 'ph-search-input');
+    input.type = 'search';
+    input.placeholder = 'Search tools and your documents';
+    input.setAttribute('aria-label', 'Search tools and your documents');
+    row.appendChild(input);
+    var close = el('button', 'ph-search-close', 'Close');
+    close.type = 'button';
+    row.appendChild(close);
+    panel.appendChild(row);
+    var results = el('div', 'ph-search-results');
+    panel.appendChild(results);
+    wrap.appendChild(panel);
+    document.body.appendChild(wrap);
+    document.documentElement.classList.add('ph-search-open');
+    searchBox = wrap;
+    setTimeout(function () {
+      input.focus();
+    }, 30);
+
+    function done() {
+      wrap.remove();
+      document.documentElement.classList.remove('ph-search-open');
+      searchBox = null;
+    }
+    close.addEventListener('click', done);
+    wrap.addEventListener('click', function (e) {
+      if (e.target === wrap) done();
+    });
+    wrap.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') done();
+      if (e.key === 'Enter') {
+        var first = results.querySelector('a');
+        if (first) first.click();
+      }
+    });
+
+    // Gather once: tools, files (here and synced), sent for signature.
+    var data = Promise.all([
+      toolList(),
+      listAll().catch(function () {
+        return [];
+      }),
+      localSent().catch(function () {
+        return [];
+      }),
+      listRecords('sent').catch(function () {
+        return [];
+      }),
+    ]).then(function (all) {
+      var byId = {};
+      var gone = {};
+      all[3].forEach(function (r) {
+        if (r && r.gone) gone[r.id] = 1;
+        else if (r && r.id) byId[r.id] = r;
+      });
+      all[2].forEach(function (r) {
+        if (r && r.id) byId[r.id] = r;
+      });
+      var now = Date.now();
+      return {
+        tools: all[0],
+        files: all[1].filter(function (r) {
+          return r.kept;
+        }),
+        sent: Object.keys(byId)
+          .map(function (k) {
+            return byId[k];
+          })
+          .filter(function (x) {
+            return !gone[x.id] && (x.retainUntil || x.expires || 0) > now;
+          }),
+      };
+    });
+
+    function section(title, items) {
+      if (!items.length) return;
+      results.appendChild(el('div', 'ph-search-head', title));
+      items.forEach(function (it) {
+        var a = el('a', 'ph-search-item');
+        a.href = it.href;
+        a.innerHTML = '<i class="ph ' + it.icon + '" aria-hidden="true"></i>';
+        var t = el('span', 'ph-search-text');
+        t.appendChild(el('strong', '', it.name));
+        if (it.sub) t.appendChild(el('span', '', it.sub));
+        a.appendChild(t);
+        results.appendChild(a);
+      });
+    }
+    function draw() {
+      var q = input.value;
+      var words = terms(q);
+      data.then(function (d) {
+        if (input.value !== q) return;
+        results.textContent = '';
+        if (!words.length) {
+          section(
+            'Recent files',
+            d.files.slice(0, 4).map(function (r) {
+              return { href: '/?ph-open=' + encodeURIComponent(r.id), icon: 'ph-file', name: r.name, sub: r.tool || '' };
+            })
+          );
+          results.appendChild(el('p', 'ph-search-hint', 'Type what you want to do, like "compress", "merge" or "sign", or the name of a document.'));
+          return;
+        }
+        var tools = d.tools
+          .map(function (t) {
+            return { t: t, s: score(t.name, words) * 3 + score(t.sub, words) };
+          })
+          .filter(function (x) {
+            return x.s > 0;
+          })
+          .sort(function (a, b) {
+            return b.s - a.s;
+          })
+          .slice(0, 8)
+          .map(function (x) {
+            return { href: '/' + x.t.href, icon: x.t.icon, name: x.t.name, sub: x.t.sub };
+          });
+        var files = d.files
+          .filter(function (r) {
+            return score(r.name + ' ' + (r.tool || ''), words) > 0;
+          })
+          .slice(0, 6)
+          .map(function (r) {
+            return { href: '/?ph-open=' + encodeURIComponent(r.id), icon: 'ph-file', name: r.name, sub: (r.tool ? r.tool + ' · ' : '') + new Date(r.at).toLocaleDateString() };
+          });
+        var sent = d.sent
+          .filter(function (x) {
+            return score(x.title, words) > 0;
+          })
+          .slice(0, 6)
+          .map(function (x) {
+            return { href: '/request-signatures.html#documents', icon: 'ph-signature', name: x.title, sub: 'Sent for signature · ' + new Date(x.createdAt).toLocaleDateString() };
+          });
+        section('Your files', files);
+        section('Sent for signature', sent);
+        section('Tools', tools);
+        if (!tools.length && !files.length && !sent.length) results.appendChild(el('p', 'ph-search-hint', 'Nothing found. Try another word, like "pdf to word" or "rotate".'));
+      });
+    }
+    input.addEventListener('input', draw);
+    draw();
+  }
+
+  function searchButton() {
+    var tries = 0;
+    (function place() {
+      var bar = document.getElementById('ph-bar');
+      if (!bar) {
+        if (++tries < 40) setTimeout(place, 100);
+        return;
+      }
+      if (document.getElementById('ph-search-btn')) return;
+      var b = el('button', 'ph-search-btn');
+      b.id = 'ph-search-btn';
+      b.type = 'button';
+      b.setAttribute('aria-label', 'Search tools and documents');
+      b.innerHTML = '<i class="ph ph-magnifying-glass" aria-hidden="true"></i><span>Search</span>';
+      b.addEventListener('click', openSearch);
+      bar.insertBefore(b, bar.firstChild);
+    })();
+    document.addEventListener('keydown', function (e) {
+      var t = e.target;
+      var typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        openSearch();
+      }
+    });
+  }
 
   function start() {
     tabbar();
     receive();
+    searchButton();
     // On any Paperhaus page, send files saved here that are not in the account yet (once a minute).
     // The home page does its own check, so it is skipped there.
     if (/^\/(index(\.html)?)?$/.test(location.pathname) || !syncCached()) return;

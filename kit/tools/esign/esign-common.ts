@@ -102,6 +102,7 @@ export interface State {
   expires: number;
   status: 'out' | 'complete' | 'declined' | 'cancelled' | 'expired';
   declined: (Stamp & { index: number; reason: string | null }) | null;
+  cancelled?: { at: number; until: number } | null;
   signers: { viewed: Stamp | null; signed: Stamp | null }[];
   envelope?: string;
   keep?: number;
@@ -234,8 +235,17 @@ export const api = {
   async decline(id: string, t: string, body: Uint8Array | null): Promise<State> {
     return (await call(`/api/esign/p/${id}/decline?t=${encodeURIComponent(t)}`, { method: 'POST', body: (body || new Uint8Array()) as BodyInit })).json();
   },
-  async cancel(id: string, t: string): Promise<void> {
-    await call(`/api/esign/p/${id}/cancel?t=${encodeURIComponent(t)}`, { method: 'POST' });
+  /** Cancel (undoable for 7 days), or with now: true delete for good. */
+  async cancel(id: string, t: string, now = false): Promise<{ until?: number }> {
+    const r = await call(`/api/esign/p/${id}/cancel?t=${encodeURIComponent(t)}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ now }),
+    });
+    return (await r.json()) as { until?: number };
+  },
+  async restore(id: string, t: string): Promise<void> {
+    await call(`/api/esign/p/${id}/restore?t=${encodeURIComponent(t)}`, { method: 'POST' });
   },
   async seal(id: string, t: string, digest: string): Promise<SealResult> {
     return (

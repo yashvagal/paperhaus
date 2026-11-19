@@ -517,3 +517,80 @@
 #tool-grid .tool-fav-btn.is-favorite {
   color: #e0a92e;
 }
+.ph-sent-row {
+  text-decoration: none;
+  color: inherit;
+}
+.ph-sent-dot {
+  flex: 0 0 auto;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin: 0 0.4rem;
+  border-radius: 50%;
+  background: var(--muted, #9ca3af);
+}
+.ph-sent-dot.is-out {
+  background: #e7a43a;
+}
+.ph-sent-dot.is-complete {
+  background: var(--good, #34d399);
+}
+.ph-sent-dot.is-declined,
+.ph-sent-dot.is-cancelled,
+.ph-sent-dot.is-expired {
+  background: var(--bad, #f87171);
+}
+.ph-sent-go {
+  align-self: flex-start;
+  margin-top: 0.4rem;
+}
+.ph-card-head a {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--accent, #b35a22);
+  text-decoration: none;
+}
+.ph-card[hidden] {
+  display: none;
+}
+.ph-home-search {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  max-width: 40rem;
+  min-height: 3.2rem;
+  margin: 0 0 1.1rem;
+  padding: 0 1.1rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong, var(--line, #374151));
+  background: var(--surface, #1f2937);
+  color: var(--muted, #9ca3af);
+  font: inherit;
+  font-size: 1rem;
+  text-align: left;
+  cursor: text;
+  box-shadow: var(--shadow-card, none);
+}
+.ph-home-search i {
+  font-size: 1.2rem;
+}
+.ph-home-search span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ph-home-search kbd {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--line, #374151);
+}
+@media (max-width: 640px) {
+  .ph-home-search kbd {
+    display: none;
+  }
+}

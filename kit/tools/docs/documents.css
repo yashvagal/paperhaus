@@ -1,0 +1,237 @@
+/* My documents (kit/tools/docs). Colors come from the Paperhaus theme (kit/theme/base.css). */
+.dc-wrap {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding-block: 1.5rem 7rem;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  color: var(--text, #f3f4f6);
+}
+.dc-h1 {
+  font-size: clamp(1.8rem, 5vw, 2.4rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+.dc-sub {
+  color: var(--muted, #9ca3af);
+  margin: 0.4rem 0 1.2rem;
+  max-width: 40rem;
+}
+.dc-search {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0 1rem;
+  min-height: 3rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong, var(--line, #374151));
+  background: var(--surface, #1f2937);
+  margin-bottom: 0.9rem;
+}
+.dc-search i {
+  color: var(--muted, #9ca3af);
+  font-size: 1.1rem;
+}
+.dc-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+  min-height: 2.8rem;
+}
+.dc-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 1.1rem;
+}
+.dc-filter {
+  min-height: 2.4rem;
+  padding: 0 0.95rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong, var(--line, #374151));
+  background: var(--surface, #1f2937);
+  color: var(--text, #f3f4f6);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dc-filter[aria-selected='true'] {
+  border-color: var(--accent, #818cf8);
+  background: var(--accent-soft, rgba(99, 102, 241, 0.15));
+}
+.dc-card {
+  background: var(--surface, #1f2937);
+  border: 1px solid var(--line, #374151);
+  border-radius: var(--r-card, 18px);
+  box-shadow: var(--shadow-card, none);
+  padding: 1.1rem 1.2rem;
+  margin-bottom: 1rem;
+}
+.dc-card[hidden] {
+  display: none;
+}
+.dc-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  margin-bottom: 0.4rem;
+}
+.dc-card-head h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.dc-card-head a {
+  color: var(--accent, #818cf8);
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+.dc-count {
+  color: var(--muted, #9ca3af);
+  font-size: 0.85rem;
+}
+.dc-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.8rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--line, #374151);
+  color: inherit;
+  text-decoration: none;
+}
+.dc-card-head + .dc-row {
+  border-top: 0;
+}
+.dc-row-link:hover strong {
+  text-decoration: underline;
+}
+.dc-badge {
+  flex: 0 0 auto;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  background: var(--accent-soft, rgba(99, 102, 241, 0.15));
+  color: var(--accent, #818cf8);
+}
+.dc-info {
+  flex: 1 1 12rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.dc-info strong {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+.dc-info span {
+  color: var(--muted, #9ca3af);
+  font-size: 0.85rem;
+}
+.dc-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.dc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.4rem;
+  padding: 0 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong, var(--line, #374151));
+  background: transparent;
+  color: var(--text, #f3f4f6);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.dc-btn-main {
+  border-color: transparent;
+  background: var(--btn-grad, var(--accent, #818cf8));
+  color: var(--btn-text, var(--on-accent, #fff));
+}
+.dc-btn-quiet {
+  border-color: transparent;
+  color: var(--muted, #9ca3af);
+}
+.dc-btn-quiet.is-sure {
+  color: var(--bad, #f87171);
+  background: var(--bad-soft, rgba(248, 113, 113, 0.15));
+}
+.dc-btn[disabled] {
+  opacity: 0.6;
+}
+.dc-dot {
+  flex: 0 0 auto;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: var(--muted, #9ca3af);
+}
+.dc-dot.is-out {
+  background: #e7a43a;
+}
+.dc-dot.is-complete {
+  background: var(--good, #34d399);
+}
+.dc-dot.is-declined,
+.dc-dot.is-cancelled,
+.dc-dot.is-expired {
+  background: var(--bad, #f87171);
+}
+.dc-go {
+  color: var(--muted, #9ca3af);
+}
+.dc-muted {
+  color: var(--muted, #9ca3af);
+  margin: 0.2rem 0 0.8rem;
+}
+.dc-empty-title {
+  margin: 0 0 0.3rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+.dc-foot {
+  color: var(--muted, #9ca3af);
+  font-size: 0.85rem;
+  margin-top: 1.2rem;
+}
+.dc-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  padding: 0.7rem 1.1rem;
+  border-radius: 999px;
+  background: var(--text, #111);
+  color: var(--bg, #fff);
+  font-weight: 600;
+  z-index: 60;
+}
+@media (max-width: 520px) {
+  .dc-acts {
+    width: 100%;
+    padding-left: 3.4rem;
+  }
+}
