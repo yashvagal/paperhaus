@@ -581,7 +581,9 @@ function writeHeaders() {
       // camera=(self): the Scan tool uses the camera, on this site only.
       'Permissions-Policy': 'geolocation=(), camera=(self), microphone=(), payment=(), usb=(), interest-cohort=()',
       'X-Robots-Tag': 'noindex, nofollow',
+      'Speculation-Rules': '"/speculationrules.json"',
     }],
+    ['/speculationrules.json', { 'Content-Type': 'application/speculationrules+json' }],
     ['/wasm/*', { 'Cache-Control': 'public, max-age=31536000, immutable' }],
     ['/assets/*', { 'Cache-Control': 'public, max-age=31536000, immutable' }],
     ['/libreoffice-wasm/*', { 'Cache-Control': 'public, max-age=604800' }],
@@ -821,10 +823,11 @@ function addPinning(env) {
     `<link rel="stylesheet" href="/kit-tools/pin/flow.css?v=${v}" ${PIN_MARK}>` +
     // flow.js first: it has to see the blob links tools make for their downloads.
     `<script src="/kit-tools/pin/flow.js?v=${v}" defer ${PIN_MARK}></script>` +
-    `<script src="/kit-tools/pin/pin.js?v=${v}" defer ${PIN_MARK}></script>` +
-    // Start loading the next page as soon as a link is pressed (Chrome), so moving between
-    // pages is quicker. Only same-site pages, never the API.
-    `<script type="speculationrules" ${PIN_MARK}>{"prefetch":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":"/api/*"}},{"not":{"href_matches":"/cdn-cgi/*"}}]},"eagerness":"conservative"}]}</script>`;
+    `<script src="/kit-tools/pin/pin.js?v=${v}" defer ${PIN_MARK}></script>`;
+  // Start loading the next page as soon as a link is pressed (Chrome), so moving between
+  // pages is quicker. Only same-site pages, never the API. Sent as a Speculation-Rules
+  // header (see writeHeaders), because the content security policy blocks inline rules.
+  writeFileSync(join(DIST, 'speculationrules.json'), JSON.stringify({ prefetch: [{ where: { and: [{ href_matches: '/*' }, { not: { href_matches: '/api/*' } }, { not: { href_matches: '/cdn-cgi/*' } }] }, eagerness: 'conservative' }] }));
   const homeTags =
     `<link rel="stylesheet" href="/kit-tools/pin/home.css?v=${v}" ${PIN_MARK}>` +
     `<script src="/kit-tools/pin/home.js?v=${v}" defer ${PIN_MARK}></script>`;

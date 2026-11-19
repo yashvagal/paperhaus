@@ -594,3 +594,32 @@
     display: none;
   }
 }
+.ph-chip[hidden],
+.is-short > .ph-chip-more {
+  display: none !important;
+}
+.ph-chip-toggle {
+  border-style: dashed;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+.ph-tools-collapsed #grid-view > :not(#ph-tools-more) {
+  display: none !important;
+}
+.ph-tools-more {
+  display: none;
+  margin: 0 auto 2rem;
+}
+.ph-tools-collapsed .ph-tools-more {
+  display: flex;
+}
+.ph-sync {
+  padding: 0.6rem 0.8rem;
+}
+.ph-sync-text strong {
+  font-size: 0.85rem;
+}
+.ph-tools-collapsed #all-tools {
+  display: none;
+}

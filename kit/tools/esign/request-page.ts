@@ -603,6 +603,13 @@ async function create(): Promise<void> {
     await saveSent(sent);
     if (ui.mode === 'me') {
       // Straight to signing, in this tab. The signing page offers the sealed copy after.
+      // The signing page has no app menu (signers have no account); this lets it offer a
+      // way back to Paperhaus for the sender signing their own copy.
+      try {
+        sessionStorage.setItem('ph-back', sent.id);
+      } catch {
+        /* fine */
+      }
       location.href = signLink(sent.id, key, tokens[0]);
       return;
     }
@@ -1374,8 +1381,9 @@ async function loadIdentity(): Promise<void> {
   try {
     const r = await fetch('/api/admin/me', { credentials: 'same-origin' });
     if (r.ok) {
-      const j = (await r.json()) as { name?: string };
+      const j = (await r.json()) as { name?: string; email?: string };
       if (j.name) identity.name = j.name;
+      if (j.email && !identity.email) identity.email = j.email;
     }
   } catch {
     /* not behind Access */

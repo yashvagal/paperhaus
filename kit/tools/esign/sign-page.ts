@@ -698,6 +698,17 @@ async function download(): Promise<void> {
 // ------------------------------------------------------------------ wire up
 
 function init(): void {
+  try {
+    const back = sessionStorage.getItem('ph-back');
+    if (back && location.hash.slice(1).startsWith(back)) {
+      $('es-back-app').classList.remove('hidden');
+      $('es-private-tag').classList.add('hidden');
+      // The sender signing their own request cancels it from Sent instead of declining.
+      $('es-decline').classList.add('hidden');
+    }
+  } catch {
+    /* fine */
+  }
   // A reload loses the address's # part (it is removed for privacy), so keep it for this tab.
   if (!location.hash) {
     try {

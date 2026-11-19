@@ -67,7 +67,7 @@
       return [
         ['merge-pdf', 'Merge into one PDF', true],
         ['pdf-multi-tool', 'Merge and reorder pages'],
-        ['compress-pdf', 'Compress them'],
+        ['compress-pdf', 'Make them smaller'],
         ['pdf-to-zip', 'Put them in a ZIP'],
       ];
     }
@@ -85,12 +85,12 @@
         ['request-signatures?mode=meothers', 'Sign it with others'],
         ['request-signatures?mode=others', 'Get it signed by others'],
         ['form-filler', 'Fill in the form', false, 'form'],
-        ['compress-pdf', 'Compress'],
-        ['pdf-multi-tool', 'Merge or reorder pages'],
-        ['pdf-to-word', 'Convert to Word'],
-        ['redact-pdf', 'Redact'],
+        ['compress-pdf', 'Make smaller'],
+        ['pdf-multi-tool', 'Pages: reorder, delete, add'],
+        ['pdf-to-word', 'Turn into Word'],
+        ['redact-pdf', 'Black out details'],
         ['protect-pdf', 'Add a password'],
-        ['edit-pdf', 'Edit'],
+        ['edit-pdf', 'Edit, add text or notes'],
         ['summarize-pdf', 'Summarize'],
       ];
     }
@@ -162,6 +162,23 @@
       }
       chips.appendChild(a);
     });
+    // The first few up front; the rest behind "More" so the choice stays simple.
+    var extra = Array.prototype.slice.call(chips.children).filter(function (c, i) {
+      return i >= 6 && c.dataset.form !== '1';
+    });
+    if (extra.length > 1) {
+      extra.forEach(function (c) {
+        c.classList.add('ph-chip-more');
+      });
+      chips.classList.add('is-short');
+      var more = el('button', 'ph-chip ph-chip-toggle', 'More (' + extra.length + ')');
+      more.type = 'button';
+      more.addEventListener('click', function () {
+        chips.classList.remove('is-short');
+        more.remove();
+      });
+      chips.appendChild(more);
+    }
     box.appendChild(chips);
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
@@ -254,7 +271,7 @@
         if (!recs.length) {
           host.appendChild(
             el('p', 'ph-muted', syncOn
-              ? 'Nothing here yet. Files you save on any device show up here. Files already in Recent on your other devices upload the next time you open Paperhaus there.'
+              ? 'Nothing yet. Files you save show up here, on all your devices.'
               : 'Files you make here show up on this device, so you can keep working on them. Nothing is uploaded.')
           );
         }
@@ -312,8 +329,8 @@
     text.appendChild(el('strong', '', on ? 'Syncing across your devices' : 'Sync across your devices'));
     text.appendChild(
       el('span', '', on
-        ? 'Your newest 30 files (up to 24 MB each) follow your sign-in. They are encrypted before they leave this device.'
-        : 'Sync is off, so these files stay on this device. Turn it on to see them on your phone and computer.')
+        ? 'Encrypted, newest 30 files.'
+        : 'Off: these files stay on this device.')
     );
     box.appendChild(text);
     if (on && flow.syncStatus) {
@@ -472,10 +489,27 @@
   // ---------------------------------------------------------------- hubs
 
   var grid = document.getElementById('tool-grid');
+  // The full list of 127 tools stays folded away until asked for (Tools tab, "See all",
+  // a hub), so Home is short; search finds any tool too.
+  var gridView = document.getElementById('grid-view');
+  if (gridView && !document.getElementById('ph-tools-more')) {
+    var moreTools = el('button', 'ph-btn ph-tools-more', 'Show all tools');
+    moreTools.id = 'ph-tools-more';
+    moreTools.type = 'button';
+    moreTools.addEventListener('click', function () {
+      location.hash = 'all-tools';
+    });
+    gridView.insertBefore(moreTools, gridView.firstChild);
+  }
+  (function () {
+    var k = location.hash.replace('#', '');
+    document.body.classList.toggle('ph-tools-collapsed', !(typeof HUBS !== 'undefined' && HUBS[k]) && k !== 'all-tools');
+  })();
   function applyHub() {
     var key = location.hash.replace('#', '');
     var hub = HUBS[key];
     document.body.classList.toggle('ph-in-hub', !!hub);
+    document.body.classList.toggle('ph-tools-collapsed', !hub && key !== 'all-tools');
     var bar = document.getElementById('ph-hubbar');
     if (!grid) return;
     grid.querySelectorAll(':scope > .category-group').forEach(function (g) {

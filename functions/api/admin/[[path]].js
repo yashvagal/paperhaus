@@ -33,7 +33,7 @@ export async function onRequest(context) {
   const admin = admins.includes(user);
   const configured = !!(env.CF_API_TOKEN && env.CF_ACCOUNT_ID && env.CF_ACCESS_POLICY_ID);
 
-  if (request.method === 'GET' && action === 'me') return json({ admin, name: (await getNames(env))[user] || '' });
+  if (request.method === 'GET' && action === 'me') return json({ admin, email: user, name: (await getNames(env))[user] || '' });
   if (!admin) return json({ error: 'not_allowed' }, 403);
   if (request.method === 'POST' && action === 'name') {
     const body = await request.json().catch(() => ({}));

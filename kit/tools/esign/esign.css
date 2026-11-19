@@ -1254,3 +1254,8 @@ html {
     gap: 0.3rem;
   }
 }
+.es-back-app {
+  color: var(--es-accent);
+  font-weight: 700;
+  text-decoration: none;
+}

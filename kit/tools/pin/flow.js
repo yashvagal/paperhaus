@@ -636,7 +636,7 @@
     head.appendChild(ok);
     var title = el('div', 'ph-done-title');
     title.appendChild(el('strong', '', rec.name));
-    var where = syncCached() && rec.size <= SYNC_LIMIT ? 'saved to Recent on all your devices' : 'saved to Recent on this device';
+    var where = syncCached() && rec.size <= SYNC_LIMIT ? 'saved to My documents' : 'saved to My documents on this device';
     title.appendChild(el('span', '', size(rec.size) + ' · ' + where));
     head.appendChild(title);
     var x = el('button', 'ph-done-x');
@@ -1193,6 +1193,15 @@
     }), true);
   }
 
+  /** A plain tab title: "Compress PDF | Paperhaus" (BentoPDF sets one generic title everywhere). */
+  function cleanTitle() {
+    var home = /^\/(index(\.html)?)?$/.test(location.pathname);
+    var h = document.querySelector('main h1, #uploader h1, h1');
+    var name = h && h.textContent.replace(/\s+/g, ' ').trim();
+    var want = home || !name ? 'Paperhaus' : name.slice(0, 70) + ' | Paperhaus';
+    if (document.title !== want) document.title = want;
+  }
+
   function start() {
     tabbar();
     loadCurrent();
@@ -1200,6 +1209,11 @@
     searchButton();
     watchPickers();
     currentBar();
+    cleanTitle();
+    window.addEventListener('load', function () {
+      setTimeout(cleanTitle, 300);
+      setTimeout(cleanTitle, 1500);
+    });
     // On any Paperhaus page, send files saved here that are not in the account yet (once a minute).
     // The home page does its own check, so it is skipped there.
     if (/^\/(index(\.html)?)?$/.test(location.pathname) || !syncCached()) return;
