@@ -21,16 +21,20 @@
   .ppl ul { list-style: none; padding: 0; margin: 0; border: 1px solid var(--line, #f0e1cd); border-radius: 16px; overflow: hidden; background: var(--surface, #fff); }
   .ppl li { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.75rem 1rem; border-top: 1px solid var(--line, #f0e1cd); }
   .ppl li:first-child { border-top: 0; }
-  .ppl li .who { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 0.1rem; overflow-wrap: anywhere; }
+  .ppl li { flex-wrap: wrap; }
+  .ppl li .who { min-width: 0; flex: 1 1 13rem; display: flex; flex-direction: column; gap: 0.1rem; overflow-wrap: anywhere; }
   .ppl li .who strong { font-weight: 600; }
   .ppl li .who small { color: var(--muted, #937d69); font-size: 0.85rem; }
   .ppl li .who .noname { color: var(--muted, #937d69); font-style: italic; font-weight: 400; }
-  .ppl li .acts { display: flex; gap: 0.25rem; flex-shrink: 0; align-items: center; }
+  .ppl li .acts { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; margin-left: auto; }
+  .ppl li .acts .ed, .ppl li .acts .rm { padding: 0.35rem 0.5rem; }
   .ppl .ed { background: transparent; color: var(--accent, #b35a22); padding: 0.35rem 0.6rem; font-weight: 600; }
   .ppl li input.nm { flex: 1 1 10rem; padding: 0.45rem 0.6rem; border-radius: 10px; }
   .ppl li .you { color: var(--muted, #937d69); font-size: 0.85rem; }
   .ppl .rm { background: transparent; color: var(--bad, #b23b2c); padding: 0.35rem 0.6rem; font-weight: 600; }
   .ppl .rm.sure { background: var(--bad-soft, #fde4df); }
+  .ppl .wel { flex: 1 1 100%; display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: var(--muted, #937d69); cursor: pointer; }
+  .ppl .wel input { flex: 0 0 auto; width: 1.1rem; height: 1.1rem; padding: 0; }
   .ppl .count { color: var(--muted, #937d69); font-size: 0.9rem; margin: 1.6rem 0 0.5rem; }
   .ppl .note { color: var(--muted, #937d69); font-size: 0.9rem; margin-top: 1.4rem; }
 </style>
@@ -44,6 +48,7 @@
     <input id="name" type="text" autocomplete="off" placeholder="Full name" aria-label="Name" maxlength="80">
     <input id="email" type="email" inputmode="email" autocomplete="off" placeholder="name@example.com" aria-label="Email to invite" required>
     <button id="addbtn" type="submit">Add</button>
+    <label class="wel"><input id="welcome" type="checkbox" checked> Email them a welcome note with how to sign in (from your Gmail)</label>
   </form>
   <p class="msg" id="msg" role="status"></p>
   <p class="count" id="count"></p>

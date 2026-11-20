@@ -4,7 +4,8 @@
  *   GET  /api/admin/me       { admin, name }      (anyone signed in; menu item, and the name
  *                                                 the Sign page fills in for them)
  *   GET  /api/admin/people   { emails: [...], names: { email: name } }
- *   POST /api/admin/add      { email, name }
+ *   POST /api/admin/add      { email, name, welcome }  welcome (default true) emails them "You're in"
+ *   POST /api/admin/welcome  { email }            send the welcome email again
  *   POST /api/admin/name     { email, name }      set or change someone's name
  *   POST /api/admin/remove   { email }
  *
@@ -21,6 +22,8 @@
  * Behind the Paperhaus sign-in, so Cloudflare Access sets the signed-in email header.
  */
 import { adminEmails } from '../../_shared/admins.js';
+import { sendWelcome } from '../../_shared/welcome.js';
+import { mailConfigured } from '../../_shared/gmail.js';
 
 const isEmail = (s) => typeof s === 'string' && s.length <= 254 && /^[^\s@<>(),;:"\\]+@[^\s@<>(),;:"\\]+\.[^\s@<>(),;:"\\]+$/.test(s);
 
@@ -41,6 +44,12 @@ export async function onRequest(context) {
     if (!isEmail(email)) return json({ error: 'bad_email' }, 400);
     const names = await setName(env, email, body.name);
     return json({ ok: true, names });
+  }
+  if (request.method === 'POST' && action === 'welcome') {
+    const body = await request.json().catch(() => ({}));
+    const email = String(body.email || '').trim().toLowerCase();
+    if (!isEmail(email)) return json({ error: 'bad_email' }, 400);
+    return json(await welcome(env, user, email));
   }
   if (!configured) return json({ error: 'not_configured' }, 503);
 
@@ -63,11 +72,26 @@ export async function onRequest(context) {
       if (action === 'add') include.push({ email: { email } });
       const saved = await putPolicy(env, policy, include);
       if (action === 'remove') await setName(env, email, '');
-      return json({ emails: emailsOf(saved), names: await getNames(env), changed: true });
+      const out = { emails: emailsOf(saved), names: await getNames(env), changed: true };
+      if (action === 'add' && body.welcome !== false) Object.assign(out, await welcome(env, user, email));
+      return json(out);
     }
     return json({ error: 'not_found' }, 404);
   } catch (err) {
     return json({ error: 'cloudflare_error', detail: String(err.message || err).slice(0, 300) }, 502);
+  }
+}
+
+/** The "You're in" email, from the owner's Gmail. Never fails the add itself. */
+async function welcome(env, owner, email) {
+  if (!mailConfigured(env)) return { welcomed: false, welcomeError: 'Gmail sending is not set up' };
+  try {
+    const names = await getNames(env);
+    await sendWelcome(env, owner, names[owner] || '', email, names[email] || '');
+    return { welcomed: true };
+  } catch (err) {
+    const code = String((err && (err.code || err.message)) || err);
+    return { welcomed: false, welcomeError: /not_connected|no_account/.test(code) ? 'Connect your Gmail on the Sign page first' : code.slice(0, 120) };
   }
 }
 

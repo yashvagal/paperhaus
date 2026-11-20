@@ -39,6 +39,17 @@
       ed.addEventListener('click', function () { editName(li, who, acts, e); });
       acts.appendChild(ed);
       if (e !== me) {
+        var wb = el('button', 'ed', 'Send welcome');
+        wb.type = 'button';
+        wb.title = 'Email them the "You\'re in" note with how to sign in';
+        wb.addEventListener('click', function () {
+          wb.disabled = true;
+          call('welcome', { email: e }).then(function (j) {
+            if (j.welcomed) { wb.textContent = 'Sent'; say('Welcome email sent to ' + (n || e) + '.', 'good'); }
+            else { wb.disabled = false; say('Could not send the welcome email: ' + (j.welcomeError || 'try again'), 'bad'); }
+          }).catch(function (err) { wb.disabled = false; say(err.message, 'bad'); });
+        });
+        acts.appendChild(wb);
         var b = el('button', 'rm', 'Remove');
         b.type = 'button';
         b.addEventListener('click', function () {
@@ -76,14 +87,23 @@
     var n = nameIn.value.trim();
     if (!e) return;
     addbtn.disabled = true; say('Adding...');
-    call('add', { email: e, name: n }).then(function (j) {
+    var wel = document.getElementById('welcome');
+    call('add', { email: e, name: n, welcome: !!(wel && wel.checked) }).then(function (j) {
       take(j); email.value = ''; nameIn.value = '';
-      say(j.changed ? (n || e) + ' can now sign in.' : (n ? 'Saved ' + n + '. ' : '') + e + ' was already on the list.', 'good');
+      if (!j.changed) { say((n ? 'Saved ' + n + '. ' : '') + e + ' was already on the list. Use Send welcome to email them.', 'good'); return; }
+      if (j.welcomed) say((n || e) + ' can now sign in. A welcome email with how to sign in is on its way.', 'good');
+      else if (wel && wel.checked) say((n || e) + ' can now sign in, but the welcome email did not send: ' + (j.welcomeError || 'try Send welcome') + '.', 'bad');
+      else say((n || e) + ' can now sign in.', 'good');
     }).catch(function (err) { say(err.message, 'bad'); })
       .then(function () { addbtn.disabled = false; });
   });
   fetch('/cdn-cgi/access/get-identity').then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; })
-    .then(function (id) { me = String((id && id.email) || '').toLowerCase(); return call('people'); })
+    .then(function (id) {
+      me = String((id && id.email) || '').toLowerCase();
+      if (me) return null;
+      return call('me').then(function (j) { me = String((j && j.email) || '').toLowerCase(); }, function () {});
+    })
+    .then(function () { return call('people'); })
     .then(take)
     .catch(function (err) { list.innerHTML = ''; say(err.message, 'bad'); });
 })();
