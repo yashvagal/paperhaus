@@ -62,3 +62,50 @@
   var touchMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
   show(/iPhone|iPad|iPod/.test(ua) || touchMac ? 'iphone' : /Android/.test(ua) ? 'android' : /Mac/.test(ua) ? 'mac' : 'windows');
 })();
+
+/* Clean section links: links to a section on the same page (href="#how" or "/#how") scroll there
+   without putting "#how" in the address bar, and a page opened with a "#section" (for example from
+   the privacy page's "/#faq") scrolls to it and then drops the hash. Without JavaScript the links
+   still work as ordinary anchors. */
+(function () {
+  if (window.__cleanAnchors) return;
+  window.__cleanAnchors = true;
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function find(hash) {
+    if (!hash || hash === "#" || hash === "#top") return document.getElementById("top") || document.body;
+    try { return document.getElementById(decodeURIComponent(hash.slice(1))); } catch (e) { return null; }
+  }
+  function go(el, smooth) {
+    if (el === document.body) window.scrollTo({ top: 0, behavior: smooth && !reduce ? "smooth" : "auto" });
+    else el.scrollIntoView({ behavior: smooth && !reduce ? "smooth" : "auto", block: "start" });
+    if (el !== document.body && !/^(A|BUTTON|INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) {
+      if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
+      try { el.focus({ preventScroll: true }); } catch (e) {}
+    }
+  }
+  function strip() {
+    if (location.hash && history.replaceState) history.replaceState(history.state, "", location.pathname + location.search);
+  }
+  document.addEventListener("click", function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var a = e.target && e.target.closest ? e.target.closest("a[href*='#']") : null;
+    if (!a || (a.target && a.target !== "_self") || a.hasAttribute("download")) return;
+    var url;
+    try { url = new URL(a.href, location.href); } catch (err) { return; }
+    if (url.origin !== location.origin || url.pathname !== location.pathname || url.search !== location.search) return;
+    var el = find(url.hash);
+    if (!el) return;
+    e.preventDefault();
+    go(el, true);
+    strip();
+  }, true);
+  function arrive() {
+    if (!location.hash) return;
+    var el = find(location.hash);
+    strip();
+    if (el) requestAnimationFrame(function () { go(el, false); });
+  }
+  window.addEventListener("hashchange", arrive);
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", arrive);
+  else arrive();
+})();
