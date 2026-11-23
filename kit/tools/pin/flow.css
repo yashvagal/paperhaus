@@ -407,3 +407,50 @@ body.ph-has-current {
 .ph-search-open .ph-current {
   display: none;
 }
+/* The one-tap offer on a tool page: "Continue with your last file?" Use it / Start new. */
+.ph-current.is-offer {
+  flex-wrap: wrap;
+  border-radius: 1.2rem;
+  padding: 0.6rem 0.6rem 0.6rem 1rem;
+}
+.ph-current.is-offer .ph-current-text {
+  flex: 1 1 10rem;
+}
+.ph-current.is-offer .ph-current-text small {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.78rem;
+}
+.ph-current-acts {
+  display: flex;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+.ph-current-use,
+.ph-current-new {
+  min-height: 2.5rem;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ph-current-use {
+  background: var(--bg, #fff);
+  color: var(--text, #111827);
+}
+.ph-current-new {
+  background: color-mix(in srgb, var(--bg, #fff) 16%, transparent);
+  color: inherit;
+}
+@media (max-width: 420px) {
+  .ph-current-acts {
+    flex: 1 1 100%;
+  }
+  .ph-current-use,
+  .ph-current-new {
+    flex: 1;
+  }
+}

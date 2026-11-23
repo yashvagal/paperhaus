@@ -80,7 +80,7 @@
       blob: blob,
     };
     return store(rec).then(function () {
-      if (rec.kept && syncCached()) upload(rec).catch(function () {});
+      if (rec.kept && syncCached()) uploadSoon(rec);
       return rec;
     });
   }
@@ -223,7 +223,28 @@
     });
   }
 
+  // One upload at a time, so two saves never race each other on the account's file list.
+  var upQ = Promise.resolve();
   function upload(rec) {
+    var run = function () {
+      return uploadNow(rec);
+    };
+    var p = upQ.then(run, run);
+    upQ = p.catch(function () {});
+    return p;
+  }
+  /** Upload a just-saved file, trying again a few times if the network drops. */
+  function uploadSoon(rec) {
+    var waits = [4000, 20000, 90000];
+    (function go(i) {
+      upload(rec).catch(function () {
+        if (i < waits.length) setTimeout(function () {
+          go(i + 1);
+        }, waits[i]);
+      });
+    })(0);
+  }
+  function uploadNow(rec) {
     if (!rec.blob || rec.size > SYNC_LIMIT) return Promise.resolve(false);
     var meta = JSON.stringify({ name: rec.name, type: rec.type, tool: rec.tool, what: rec.what, size: rec.size });
     return Promise.all([rec.blob.arrayBuffer().then(seal), seal(enc.encode(meta))]).then(function (both) {
@@ -545,10 +566,12 @@
     return revoke.call(URL, url);
   };
 
+  // My documents and the viewer only hand out files that are already kept: don't keep them twice.
+  var KEEP_OFF = /^\/(my-documents|view-document)(\.html)?$/.test(location.pathname);
   var last = { name: '', at: 0 };
   function seen(a) {
     try {
-      if (!a || !a.hasAttribute('download') || !a.href) return;
+      if (KEEP_OFF || !a || !a.hasAttribute('download') || !a.href) return;
       var name = a.getAttribute('download') || 'file';
       if (last.name === name && Date.now() - last.at < 1500) return;
       var blob = blobs.get(a.href);
@@ -587,6 +610,49 @@
     true
   );
 
+  // A file shared from a tool (the phone's Share sheet) is kept too, like a download.
+  try {
+    if (navigator.share && !KEEP_OFF) {
+      var share0 = navigator.share;
+      navigator.share = function (data) {
+        var p = share0.apply(navigator, arguments);
+        var files = data && data.files ? Array.prototype.slice.call(data.files) : [];
+        if (files.length) {
+          p.then(function () {
+            files.forEach(function (f) {
+              saved(f, f.name);
+            });
+          }, function () {});
+        }
+        return p;
+      };
+    }
+  } catch (e) {
+    /* leave sharing as it is */
+  }
+
+  /** Share a file with the phone's Share sheet. Resolves 'shared', 'cancelled', 'again' (tap again) or 'none'. */
+  function shareFile(blob, name, type) {
+    var f = null;
+    try {
+      f = new File([blob], name || 'file', { type: type || blob.type || guessType(name) });
+    } catch (e) {
+      f = null;
+    }
+    if (!f || !navigator.share || !navigator.canShare || !navigator.canShare({ files: [f] })) return Promise.resolve('none');
+    return navigator.share({ files: [f], title: f.name }).then(
+      function () {
+        return 'shared';
+      },
+      function (err) {
+        var n = err && err.name;
+        if (n === 'AbortError') return 'cancelled';
+        if (n === 'NotAllowedError') return 'again';
+        return 'none';
+      }
+    );
+  }
+
   function toolName() {
     var h = document.querySelector('main h1, h1');
     var t = (h && h.textContent) || document.title.split('|')[0];
@@ -595,7 +661,14 @@
 
   function saved(blob, name) {
     if (!blob || !blob.size) return;
-    put(blob, name, { tool: toolName() })
+    // The same file saved again (say downloaded, then shared) is kept once.
+    list()
+      .then(function (all) {
+        var twin = all.filter(function (r) {
+          return r.kept && r.name === name && r.size === blob.size && Date.now() - r.at < 30 * 60000;
+        })[0];
+        return twin || put(blob, name, { tool: toolName() });
+      })
       .then(function (rec) {
         setCurrent([rec]);
         showDone(rec);
@@ -804,6 +877,7 @@
     setCurrent: setCurrent,
     clearCurrent: clearCurrent,
     useFiles: useFiles,
+    shareFile: shareFile,
     syncLimit: SYNC_LIMIT,
   };
 
@@ -1024,16 +1098,21 @@
 
 
   // ---------------------------------------------------------------- the document you're working on
-  // Once you open, upload or save a document, every tool you go to starts with it loaded,
-  // until you remove it (the "Working on" bar at the bottom). Kept in this browser.
+  // Once you open, upload or save a document, every tool you go to offers it in one tap
+  // ("Use <name>?" with Use it / Start new) until you remove it or a couple of hours pass.
+  // Tools never load it silently, so a new task never starts with an old file in it.
+  // Kept in this browser. The Scan page starts clean and never offers it.
   var CUR_KEY = 'ph-current';
+  var CUR_TTL = 2 * 3600000;
   var autoLoading = false;
+  var offerOpen = false;
+  var SCAN_PAGE = /^\/scan-document(\.html)?$/.test(location.pathname);
   var NOT_TOOLS = /^\/(index(\.html)?|my-documents(\.html)?|view-document(\.html)?|people(\.html)?|privacy(\.html)?|about(\.html)?)?$/;
 
   function getCurrent() {
     try {
       var c = JSON.parse(localStorage.getItem(CUR_KEY) || 'null');
-      if (c && Array.isArray(c.files) && c.files.length && Date.now() - c.at < 24 * 3600000) return c;
+      if (c && Array.isArray(c.files) && c.files.length && Date.now() - c.at < CUR_TTL) return c;
     } catch (e) {
       /* fine */
     }
@@ -1048,6 +1127,7 @@
   function setCurrent(recs) {
     recs = (recs || []).filter(Boolean).slice(0, 20);
     if (!recs.length) return;
+    offerOpen = false;
     try {
       localStorage.setItem(CUR_KEY, JSON.stringify({ at: Date.now(), files: recs.map(function (r) {
         return { id: r.id, name: r.name, type: r.type, size: r.size };
@@ -1059,6 +1139,7 @@
   }
   function clearCurrent() {
     var c = getCurrent();
+    offerOpen = false;
     try {
       localStorage.removeItem(CUR_KEY);
     } catch (e) {
@@ -1114,7 +1195,7 @@
   function currentBar() {
     var bar = document.getElementById('ph-current');
     var c = getCurrent();
-    if (!c || document.body.classList.contains('es-signer-page')) {
+    if (!c || SCAN_PAGE || document.body.classList.contains('es-signer-page')) {
       if (bar) bar.remove();
       document.body.classList.remove('ph-has-current');
       return;
@@ -1127,6 +1208,8 @@
     }
     document.body.classList.add('ph-has-current');
     bar.textContent = '';
+    bar.classList.toggle('is-offer', offerOpen);
+    if (offerOpen) return offerBar(bar, c);
     var open = el('a', 'ph-current-open');
     open.href = '/view-document.html?id=' + encodeURIComponent(c.files[0].id);
     open.innerHTML = '<i class="ph ph-file-text" aria-hidden="true"></i>';
@@ -1148,13 +1231,45 @@
     bar.appendChild(x);
   }
 
+  /** On a tool page: "Use <name>?" with Use it (load it into the tool) or Start new (forget it). */
+  function offerBar(bar, c) {
+    var name = c.files[0].name + (c.files.length > 1 ? ' and ' + (c.files.length - 1) + ' more' : '');
+    var t = el('span', 'ph-current-text');
+    t.appendChild(el('small', '', 'Continue with your last file?'));
+    t.appendChild(el('strong', '', name));
+    bar.appendChild(t);
+    var acts = el('div', 'ph-current-acts');
+    var use = el('button', 'ph-current-use', 'Use it');
+    use.type = 'button';
+    use.addEventListener('click', function () {
+      offerOpen = false;
+      currentBar();
+      loadInto(c.files.map(function (f) {
+        return f.id;
+      }), true);
+    });
+    var fresh = el('button', 'ph-current-new', 'Start new');
+    fresh.type = 'button';
+    fresh.addEventListener('click', function () {
+      clearCurrent();
+    });
+    acts.appendChild(use);
+    acts.appendChild(fresh);
+    bar.appendChild(acts);
+  }
+
   function watchPickers() {
     // Anything chosen in any file picker becomes the document you're working on.
+    // (Not on Scan: those are camera photos, not the document.)
     document.addEventListener(
       'change',
       function (e) {
         var t = e.target;
-        if (autoLoading || !t || t.tagName !== 'INPUT' || t.type !== 'file' || t.id === 'ph-file' || !t.files || !t.files.length) return;
+        if (autoLoading || SCAN_PAGE || !t || t.tagName !== 'INPUT' || t.type !== 'file' || t.id === 'ph-file' || !t.files || !t.files.length) return;
+        if (offerOpen) {
+          offerOpen = false;
+          currentBar();
+        }
         useFiles(t.files).catch(function () {});
       },
       true
@@ -1183,14 +1298,27 @@
     );
   }
 
-  /** On a tool page opened without a file, start with the current document loaded. */
+  /** On a tool page opened without a file, offer the current document (it fits the tool). */
   function loadCurrent() {
     var c = getCurrent();
-    if (!c || NOT_TOOLS.test(location.pathname) || /[?&]ph-file=/.test(location.search)) return;
-    if (/^\/(request-signatures|sign-request)/.test(location.pathname) && /mode=/.test(location.search) === false && location.hash === '#documents') return;
-    loadInto(c.files.map(function (f) {
-      return f.id;
-    }), true);
+    if (!c || SCAN_PAGE || NOT_TOOLS.test(location.pathname) || /[?&]ph-file=/.test(location.search)) return;
+    if (/^\/(request-signatures|sign-request)/.test(location.pathname) && location.hash === '#documents') return;
+    var tries = 0;
+    (function check() {
+      var input = pickerFor();
+      if (!input || document.readyState !== 'complete') {
+        if (tries++ < 60) setTimeout(check, 150);
+        return;
+      }
+      var now = getCurrent();
+      if (!now || now.at !== c.at) return;
+      var fits = c.files.some(function (f) {
+        return accepts(input, { name: f.name, type: f.type });
+      });
+      if (!fits) return;
+      offerOpen = true;
+      currentBar();
+    })();
   }
 
   /** A plain tab title: "Compress PDF | Paperhaus" (BentoPDF sets one generic title everywhere). */

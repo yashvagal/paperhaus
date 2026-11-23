@@ -127,6 +127,17 @@ function fileRow(r) {
   open.type = 'button';
   open.title = 'Open it and use any tool on it';
   open.onclick = () => (location.href = '/view-document.html?id=' + encodeURIComponent(r.id));
+  const save = (rec) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(rec.blob);
+    a.download = rec.name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }, 2000);
+  };
   const dl = el('button', 'dc-btn', 'Download');
   dl.type = 'button';
   dl.onclick = () => {
@@ -134,18 +145,48 @@ function fileRow(r) {
     get()
       .then((rec) => {
         if (!rec || !rec.blob) throw new Error('missing');
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(rec.blob);
-        a.download = rec.name;
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => {
-          URL.revokeObjectURL(a.href);
-          a.remove();
-        }, 2000);
+        save(rec);
       })
       .catch(() => toast('That file is not available right now.'))
       .finally(() => (dl.disabled = false));
+  };
+  // Share: the phone's Share sheet (Messages, WhatsApp, Mail...). Shown where the browser can share.
+  const sh = el('button', 'dc-btn', 'Share');
+  sh.type = 'button';
+  sh.hidden = !navigator.share;
+  let ready = null;
+  const share = (rec) =>
+    flow.shareFile(rec.blob, rec.name, rec.type).then((res) => {
+      if (res === 'again') {
+        // The file had to come from another device first; one more tap opens the Share sheet.
+        ready = rec;
+        sh.textContent = 'Tap to share';
+        return;
+      }
+      ready = null;
+      sh.textContent = 'Share';
+      if (res === 'none') {
+        save(rec);
+        toast('This browser cannot share files, so it was downloaded instead.');
+      }
+    });
+  sh.onclick = () => {
+    if (ready) return share(ready);
+    if (r.blob) return share(r);
+    sh.disabled = true;
+    sh.textContent = 'Getting it...';
+    flow
+      .getAny(r.id)
+      .then((rec) => {
+        if (!rec || !rec.blob) throw new Error('missing');
+        sh.disabled = false;
+        return share(rec);
+      })
+      .catch(() => {
+        sh.disabled = false;
+        sh.textContent = 'Share';
+        toast('That file is not available right now.');
+      });
   };
   const rm = el('button', 'dc-btn dc-btn-quiet', 'Remove');
   rm.type = 'button';
@@ -162,7 +203,7 @@ function fileRow(r) {
       render();
     });
   };
-  acts.append(open, dl, rm);
+  acts.append(open, dl, sh, rm);
   row.appendChild(acts);
   return row;
 }

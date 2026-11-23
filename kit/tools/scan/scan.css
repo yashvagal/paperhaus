@@ -123,6 +123,32 @@
   color: var(--sc-accent);
 }
 
+/* ------------------------------------------------------------ an earlier scan, not saved */
+.sc-resume {
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.1rem;
+  border-radius: 1rem;
+  border: 1px solid var(--sc-accent-soft);
+  background: var(--sc-surface-2);
+  color: var(--sc-text);
+}
+.sc-resume p {
+  margin: 0 0 0.75rem;
+}
+.sc-resume p strong {
+  display: block;
+}
+.sc-resume-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+@media (max-width: 480px) {
+  .sc-resume-acts .sc-btn {
+    flex: 1 1 100%;
+  }
+}
+
 /* ------------------------------------------------------------ panels */
 .sc-panel {
   margin-top: 1.75rem;

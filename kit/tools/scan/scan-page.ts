@@ -252,10 +252,43 @@ let saveTimer = 0;
 function persist(): void {
   clearTimeout(saveTimer);
   saveTimer = window.setTimeout(() => {
+    void dbSet('done', false);
     void dbSet('pages', state.pages);
     void dbSet('qr', state.qr);
     void dbSet('settings', { ...settings, name: settings.name });
   }, 300);
+}
+
+// A scan is finished once it is downloaded or shared. The next visit then starts a new one
+// instead of showing the old pages again; a scan that was never saved is offered back.
+let restoredIds = new Set<string>();
+
+function markDone(): void {
+  clearTimeout(saveTimer);
+  void dbSet('pages', state.pages);
+  void dbSet('settings', { ...settings, name: settings.name });
+  void dbSet('done', true);
+}
+
+/** Drop the pages left from an earlier visit (pages added since stay). */
+function startNew(): void {
+  state.pages.filter((p) => restoredIds.has(p.id)).forEach((p) => dropThumb(p.id));
+  state.pages = state.pages.filter((p) => !restoredIds.has(p.id));
+  restoredIds = new Set();
+  pendingIdPage = null;
+  settings.name = '';
+  persist();
+  renderGrid();
+  syncSettingsUi();
+  $('sc-result').textContent = '';
+  $('sc-resume').classList.add('hidden');
+}
+
+function offerResume(): void {
+  const n = state.pages.length;
+  if (!n) return;
+  $('sc-resume-text').textContent = `${n} ${n === 1 ? 'page' : 'pages'}, not saved yet.`;
+  $('sc-resume').classList.remove('hidden');
 }
 
 async function restore(): Promise<void> {
@@ -265,6 +298,13 @@ async function restore(): Promise<void> {
   if (saved) Object.assign(settings, saved);
   if (Array.isArray(pages)) state.pages = pages.filter((p) => p && Array.isArray(p.shots) && p.shots.length);
   if (Array.isArray(qr)) state.qr = qr;
+  if (state.pages.length && (await dbGet<boolean>('done'))) {
+    // Saved last time: start fresh.
+    state.pages = [];
+    settings.name = '';
+    void dbSet('pages', []);
+  }
+  restoredIds = new Set(state.pages.map((p) => p.id));
 }
 
 // ------------------------------------------------------------------ rendering
@@ -1504,6 +1544,7 @@ async function savePdf(): Promise<void> {
   if (!bytes) return;
   const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' });
   downloadFile(blob, `${cleanName()}.pdf`);
+  markDone();
   $('sc-result').textContent = `Saved ${cleanName()}.pdf (${pageCount()} page${pageCount() === 1 ? '' : 's'}, ${formatBytes(blob.size)}).`;
 }
 
@@ -1520,6 +1561,7 @@ async function tryShare(): Promise<void> {
   if (!readyShare) return;
   try {
     await navigator.share({ files: [readyShare], title: cleanName() });
+    markDone();
     $('sc-share-modal').classList.add('hidden');
     readyShare = null;
   } catch (err) {
@@ -1553,11 +1595,13 @@ async function saveImages(): Promise<void> {
   if (!files?.length) return;
   if (files.length === 1) {
     downloadFile(files[0][1], files[0][0]);
+    markDone();
     return;
   }
   const zip = new JSZip();
   for (const [name, blob] of files) zip.file(name, blob);
   downloadFile(await zip.generateAsync({ type: 'blob' }), `${cleanName()}.zip`);
+  markDone();
 }
 
 async function extractText(): Promise<void> {
@@ -1699,9 +1743,18 @@ function bind(): void {
     state.pages.forEach((p) => dropThumb(p.id));
     state.pages = [];
     pendingIdPage = null;
+    settings.name = '';
+    restoredIds = new Set();
     persist();
     renderGrid();
+    syncSettingsUi();
     $('sc-result').textContent = '';
+    $('sc-resume').classList.add('hidden');
+  });
+  $('sc-resume-new').addEventListener('click', startNew);
+  $('sc-resume-keep').addEventListener('click', () => {
+    restoredIds = new Set();
+    $('sc-resume').classList.add('hidden');
   });
   $('sc-apply-all').addEventListener('click', () => {
     const first = state.pages[0];
@@ -1871,6 +1924,7 @@ async function init(): Promise<void> {
   bind();
   const wanted = new URLSearchParams(location.search).get('mode') as Mode | null;
   setMode(wanted && wanted in MODE_NAMES ? wanted : 'doc');
+  offerResume();
   // Start loading the engine in the background so the camera opens quickly.
   setTimeout(() => {
     if (!engine) {

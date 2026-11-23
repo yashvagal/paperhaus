@@ -19,6 +19,7 @@ interface Flow {
   setCurrent?: (recs: Rec[]) => void;
   kindOf(name: string, type: string): string;
   openSearch?: () => void;
+  shareFile?: (blob: Blob, name: string, type?: string) => Promise<string>;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -132,9 +133,7 @@ async function main(): Promise<void> {
   const when = new Date(rec.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   $('dv-meta').textContent = [rec.tool ? `Made with ${rec.tool}` : '', when, size(rec.size || blob.size)].filter(Boolean).join(' · ');
 
-  const dl = $<HTMLButtonElement>('dv-download');
-  dl.disabled = false;
-  dl.onclick = () => {
+  const save = (): void => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = rec.name;
@@ -144,6 +143,20 @@ async function main(): Promise<void> {
       URL.revokeObjectURL(a.href);
       a.remove();
     }, 2000);
+  };
+  const dl = $<HTMLButtonElement>('dv-download');
+  dl.disabled = false;
+  dl.onclick = save;
+  const sh = $<HTMLButtonElement>('dv-share');
+  sh.hidden = !navigator.share || !flow.shareFile;
+  sh.disabled = false;
+  sh.onclick = () => {
+    if (!flow.shareFile) return save();
+    void flow.shareFile(blob, rec.name, rec.type).then((res: string) => {
+      if (res !== 'none') return;
+      save();
+      $('dv-meta').textContent += ' · This browser cannot share files, so it was downloaded instead.';
+    });
   };
 
   const kind = flow.kindOf(rec.name, rec.type);
