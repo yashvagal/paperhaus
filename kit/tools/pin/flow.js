@@ -528,19 +528,29 @@
   ];
   var IMAGE_STEPS = [
     ['image-to-pdf', 'Make a PDF', 'Put the pictures into one PDF.'],
+    ['compress-image', 'Make smaller', 'Easier to email or upload.'],
+    ['resize-image', 'Resize', 'Pixels, percent, or a post or profile size.'],
+    ['convert-image', 'Change the type', 'To JPG, PNG or WebP.'],
+    ['remove-photo-info', 'Remove photo info', 'Location, camera and date.'],
     ['scan-document', 'Clean up as a scan', 'Crop, straighten and remove shadows.'],
   ];
+  var OFFICE_STEPS = [
+    ['compress-office', 'Make smaller', 'Shrinks the pictures inside.'],
+  ];
+  var VIDEO_STEPS = [['compress-video', 'Make smaller', 'For email, WhatsApp and uploads.']];
 
   function kindOf(name, type) {
     var n = String(name).toLowerCase();
     if (type === 'application/pdf' || /\.pdf$/.test(n)) return 'pdf';
-    if (/^image\//.test(type || '') || /\.(png|jpe?g|webp|heic|heif|gif|bmp|tiff?)$/.test(n)) return 'image';
+    if (/^image\//.test(type || '') || /\.(png|jpe?g|webp|heic|heif|gif|bmp|tiff?|avif)$/.test(n)) return 'image';
+    if (/\.(docx|pptx|xlsx|odt|odp|ods)$/.test(n)) return 'office';
+    if (/^video\//.test(type || '') || /\.(mp4|mov|m4v|webm|mkv)$/.test(n)) return 'video';
     return 'other';
   }
 
   function stepsFor(kind) {
     var here = (location.pathname.match(/\/([^/]+?)(?:\.html)?\/?$/) || [])[1] || '';
-    var steps = kind === 'pdf' ? PDF_STEPS : kind === 'image' ? IMAGE_STEPS : [];
+    var steps = kind === 'pdf' ? PDF_STEPS : kind === 'image' ? IMAGE_STEPS : kind === 'office' ? OFFICE_STEPS : kind === 'video' ? VIDEO_STEPS : [];
     return steps.filter(function (s) {
       return s[0] !== here;
     });
@@ -719,7 +729,16 @@
     x.addEventListener('click', closeDone);
     head.appendChild(x);
     panel.appendChild(head);
-    if (steps.length) {
+    // Pages that list their own results (image tools, ZIP, QR) get a short note that closes itself.
+    var compact = !!document.querySelector('meta[name="ph-done"][content="compact"]');
+    if (compact) {
+      panel.classList.add('is-compact');
+      var mine = panel;
+      setTimeout(function () {
+        if (panel === mine) closeDone();
+      }, 3500);
+    }
+    if (steps.length && !compact) {
       panel.appendChild(el('div', 'ph-done-label', 'Keep working on this file'));
       var grid = el('div', 'ph-done-steps');
       steps.slice(0, 6).forEach(function (s) {

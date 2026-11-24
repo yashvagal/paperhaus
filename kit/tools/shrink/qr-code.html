@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>QR Code Generator | BentoPDF</title>
+    <meta name="ph-done" content="compact" />
+    <meta name="description" content="Make QR codes for links, Wi-Fi, contacts, email and phone numbers. Free, no account." />
+    <link href="/src/css/styles.css" rel="stylesheet" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/images/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/images/favicon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  </head>
+
+  <body class="antialiased bg-gray-900">
+    {{> navbar }}
+
+    <main class="es-wrap">
+      <button id="back-to-tools" class="flex items-center gap-2 text-indigo-300 hover:text-indigo-400 mb-4 font-semibold">
+        <i data-lucide="arrow-left" class="cursor-pointer"></i>
+        <span class="cursor-pointer">Back to Tools</span>
+      </button>
+      <h1 class="es-h1">QR Code Generator</h1>
+      <p class="es-sub" style="margin-top: 0.4rem; max-width: 42rem">Make a QR code for a link, Wi-Fi, a contact card, an email or a phone number. Free, no account, and the codes never expire.</p>
+
+      <div class="qr-layout">
+        <section class="es-card qr-form">
+          <div class="mt-seg qr-kinds" role="radiogroup" aria-label="What the code opens">
+            <label><input type="radio" name="kind" value="url" checked /><span><i class="ph ph-link"></i> Link</span></label>
+            <label><input type="radio" name="kind" value="wifi" /><span><i class="ph ph-wifi-high"></i> Wi-Fi</span></label>
+            <label><input type="radio" name="kind" value="contact" /><span><i class="ph ph-address-book"></i> Contact</span></label>
+            <label><input type="radio" name="kind" value="email" /><span><i class="ph ph-envelope-simple"></i> Email</span></label>
+            <label><input type="radio" name="kind" value="phone" /><span><i class="ph ph-phone"></i> Call or text</span></label>
+            <label><input type="radio" name="kind" value="text" /><span><i class="ph ph-text-aa"></i> Text</span></label>
+          </div>
+
+          <div class="qr-fields" data-kind="url">
+            <label class="es-label">Web address<input id="qr-url" class="es-input" type="url" inputmode="url" placeholder="https://example.com" /></label>
+          </div>
+          <div class="qr-fields sh-hidden" data-kind="wifi">
+            <label class="es-label">Network name<input id="qr-ssid" class="es-input" type="text" autocomplete="off" /></label>
+            <label class="es-label">Password<input id="qr-wpass" class="es-input" type="text" autocomplete="off" spellcheck="false" /></label>
+            <label class="es-label">Security<select id="qr-wsec" class="es-input"><option value="WPA" selected>WPA or WPA2 (most networks)</option><option value="WEP">WEP</option><option value="nopass">None (open network)</option></select></label>
+            <label class="es-check-row"><input id="qr-whidden" type="checkbox" /> Hidden network</label>
+          </div>
+          <div class="qr-fields sh-hidden" data-kind="contact">
+            <div class="qr-two"><label class="es-label">First name<input id="qr-fn" class="es-input" type="text" /></label><label class="es-label">Last name<input id="qr-ln" class="es-input" type="text" /></label></div>
+            <label class="es-label">Phone<input id="qr-cphone" class="es-input" type="tel" inputmode="tel" /></label>
+            <label class="es-label">Email<input id="qr-cemail" class="es-input" type="email" inputmode="email" /></label>
+            <div class="qr-two"><label class="es-label">Company<input id="qr-org" class="es-input" type="text" /></label><label class="es-label">Job title<input id="qr-title" class="es-input" type="text" /></label></div>
+            <label class="es-label">Website<input id="qr-cweb" class="es-input" type="url" inputmode="url" /></label>
+          </div>
+          <div class="qr-fields sh-hidden" data-kind="email">
+            <label class="es-label">Email address<input id="qr-to" class="es-input" type="email" inputmode="email" /></label>
+            <label class="es-label">Subject (optional)<input id="qr-subj" class="es-input" type="text" /></label>
+            <label class="es-label">Message (optional)<textarea id="qr-body" class="es-textarea" rows="3"></textarea></label>
+          </div>
+          <div class="qr-fields sh-hidden" data-kind="phone">
+            <label class="es-label">Phone number<input id="qr-num" class="es-input" type="tel" inputmode="tel" placeholder="+1 404 555 0123" /></label>
+            <div class="mt-seg"><label><input type="radio" name="ptype" value="tel" checked /><span>Call</span></label><label><input type="radio" name="ptype" value="sms" /><span>Text message</span></label></div>
+            <label class="es-label qr-sms sh-hidden">Message (optional)<textarea id="qr-sms" class="es-textarea" rows="2"></textarea></label>
+          </div>
+          <div class="qr-fields sh-hidden" data-kind="text">
+            <label class="es-label">Text<textarea id="qr-text" class="es-textarea" rows="4" maxlength="1500"></textarea></label>
+          </div>
+
+          <details class="qr-more">
+            <summary>Colours and size</summary>
+            <div class="qr-two">
+              <label class="es-label">Code colour<input id="qr-dark" class="qr-color" type="color" value="#111111" /></label>
+              <label class="es-label">Background<input id="qr-light" class="qr-color" type="color" value="#ffffff" /></label>
+            </div>
+            <label class="es-check-row"><input id="qr-clear" type="checkbox" /> See-through background (PNG and SVG)</label>
+            <label class="es-label">Size<select id="qr-size" class="es-input"><option value="512">512 px</option><option value="1024" selected>1024 px</option><option value="2048">2048 px (print)</option></select></label>
+            <label class="es-label">Damage tolerance<select id="qr-ecc" class="es-input"><option value="L">Low (simplest code)</option><option value="M" selected>Medium</option><option value="Q">High</option><option value="H">Highest (survives scratches)</option></select></label>
+          </details>
+        </section>
+
+        <section class="es-card qr-preview">
+          <div class="qr-canvas-wrap"><canvas id="qr-canvas" width="300" height="300" aria-label="QR code preview"></canvas><p id="qr-empty" class="es-sub">Fill in the details and the code appears here.</p></div>
+          <div class="es-row qr-acts">
+            <button id="qr-png" class="es-btn es-primary" type="button" disabled><i class="ph ph-download-simple"></i> PNG</button>
+            <button id="qr-svg" class="es-btn" type="button" disabled><i class="ph ph-file-svg"></i> SVG</button>
+            <button id="qr-pdf" class="es-btn" type="button" disabled><i class="ph ph-file-pdf"></i> PDF</button>
+          </div>
+          <p class="sh-help">Test it with your phone camera before printing. Codes made here work forever: they hold the details themselves, not a link to a service.</p>
+        </section>
+      </div>
+    </main>
+
+    <div id="mt-busy" class="es-busy hidden"><div class="es-busy-card"><div class="es-spin"></div><span id="mt-busy-text">Working...</span><div id="mt-busy-bar" class="mt-bar hidden"></div></div></div>
+    <div id="mt-toast" class="es-toast hidden" role="status" aria-live="polite"></div>
+    <div id="alert-modal" class="hidden"><div id="alert-title"></div><div id="alert-message"></div><button id="alert-ok"></button></div>
+    <div id="loader-modal" class="hidden"><div id="loader-text"></div></div>
+
+    {{> footer }}
+    <script type="module" src="/src/js/utils/lucide-init.ts"></script>
+    <script type="module" src="/src/js/utils/full-width.ts"></script>
+    <script type="module" src="/src/js/utils/simple-mode-footer.ts"></script>
+    <script type="module" src="/src/js/logic/kit-shrink/qr-page.ts"></script>
+    <script type="module" src="/src/js/mobileMenu.ts"></script>
+    <script type="module" src="/src/js/main.ts"></script>
+  </body>
+</html>

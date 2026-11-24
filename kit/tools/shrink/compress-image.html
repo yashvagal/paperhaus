@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Compress Images | BentoPDF</title>
+    <meta name="ph-done" content="compact" />
+    <meta name="description" content="Make JPG, PNG, WebP and iPhone photos smaller, on your device." />
+    <link href="/src/css/styles.css" rel="stylesheet" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/images/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/images/favicon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  </head>
+
+  <body class="antialiased bg-gray-900">
+    {{> navbar }}
+
+    <main class="es-wrap">
+      <button id="back-to-tools" class="flex items-center gap-2 text-indigo-300 hover:text-indigo-400 mb-4 font-semibold">
+        <i data-lucide="arrow-left" class="cursor-pointer"></i>
+        <span class="cursor-pointer">Back to Tools</span>
+      </button>
+      <h1 class="es-h1">Compress Images</h1>
+      <p class="es-sub" style="margin-top: 0.4rem; max-width: 42rem">Make photos and pictures smaller for email, websites and upload forms. JPG, PNG, WebP and iPhone (HEIC) photos. They are shrunk right here, nothing is uploaded.</p>
+
+      <section class="es-card" style="margin-top: 1.2rem">
+        <label id="mt-drop" class="es-drop" for="mt-file">
+          <i class="ph ph-arrows-in"></i>
+          <strong>Choose pictures or drop them here</strong>
+          <span class="sh-drop-sub">JPG, PNG, WebP, HEIC, GIF, AVIF. As many as you like.</span>
+          <input id="mt-file" type="file" accept="image/*,.heic,.heif,.avif,.jpg,.jpeg,.png,.webp,.gif,.bmp,.svg" multiple hidden />
+        </label>
+        <div id="sh-files" class="hidden">
+          <div class="sh-files-head"><h2>Your files</h2><button id="sh-clear" class="es-linkbtn" type="button">Clear all</button></div>
+          <div id="sh-list" class="sh-list"></div>
+        </div>
+      </section>
+
+      <section class="es-card">
+        <div class="sh-opts">
+          <div>
+            <div class="mt-opt-title">How small</div>
+            <div class="mt-seg">
+              <label><input type="radio" name="level" value="small" /><span>Smallest<small>Good for email</small></span></label>
+              <label><input type="radio" name="level" value="balanced" checked /><span>Balanced<small>Looks the same</small></span></label>
+              <label><input type="radio" name="level" value="best" /><span>Best quality<small>A little smaller</small></span></label>
+            </div>
+          </div>
+          <div>
+            <div class="mt-opt-title">Or aim for a size <span class="es-sub">(optional)</span></div>
+            <div class="sh-inline">
+              <span class="es-sub">Under</span>
+              <input id="sh-target" class="es-input sh-num" type="number" min="1" step="1" inputmode="decimal" placeholder="e.g. 200" />
+              <select id="sh-target-unit" class="es-input" aria-label="Unit"><option value="kb" selected>KB</option><option value="mb">MB</option></select>
+            </div>
+            <p class="sh-help">For upload forms with a limit ("must be under 200 KB"). Each picture gets the best quality that fits.</p>
+          </div>
+          <div>
+            <div class="mt-opt-title">Save as</div>
+            <select id="sh-format" class="es-input" style="max-width: 20rem">
+              <option value="same" selected>Same type as each picture</option>
+              <option value="image/jpeg">JPG (works everywhere)</option>
+              <option value="image/webp">WebP (smallest, for websites)</option>
+            </select>
+            <p class="sh-help">iPhone photos (HEIC) are saved as JPG so they open anywhere.</p>
+          </div>
+          <div class="es-row">
+            <button id="sh-go" class="es-btn es-primary" type="button" disabled><i class="ph ph-arrows-in"></i> Compress</button>
+            <span id="sh-hint" class="es-sub"></span>
+          </div>
+        </div>
+      </section>
+
+      <section id="sh-done" class="es-card hidden">
+        <div class="sh-done">
+          <div><div class="es-sub">Done</div><strong id="sh-total"></strong></div>
+          <button id="sh-all" class="es-btn es-primary" type="button"></button>
+        </div>
+        <p class="sh-help">Pictures you download are kept in My documents too. If a picture could not get smaller, the original is kept.</p>
+      </section>
+    </main>
+
+    <div id="mt-busy" class="es-busy hidden"><div class="es-busy-card"><div class="es-spin"></div><span id="mt-busy-text">Working...</span><div id="mt-busy-bar" class="mt-bar hidden"></div></div></div>
+    <div id="mt-toast" class="es-toast hidden" role="status" aria-live="polite"></div>
+    <div id="alert-modal" class="hidden"><div id="alert-title"></div><div id="alert-message"></div><button id="alert-ok"></button></div>
+    <div id="loader-modal" class="hidden"><div id="loader-text"></div></div>
+
+    {{> footer }}
+    <script type="module" src="/src/js/utils/lucide-init.ts"></script>
+    <script type="module" src="/src/js/utils/full-width.ts"></script>
+    <script type="module" src="/src/js/utils/simple-mode-footer.ts"></script>
+    <script type="module" src="/src/js/logic/kit-shrink/compress-image-page.ts"></script>
+    <script type="module" src="/src/js/mobileMenu.ts"></script>
+    <script type="module" src="/src/js/main.ts"></script>
+  </body>
+</html>

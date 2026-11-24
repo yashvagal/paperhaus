@@ -416,6 +416,35 @@ ${entry('summarize-pdf', 'Summarize PDF', 'ph-sparkle', 'Key points of a PDF, wr
   packages: ['pptxgenjs@3.12.0'],
 };
 
+// Pictures, video, Office files, ZIP and QR codes (kit/tools/shrink), all on the device.
+const SHRINK_PAGES = ['compress-image', 'resize-image', 'convert-image', 'remove-photo-info', 'compress-office', 'compress-video', 'zip-files', 'qr-code'];
+const SHRINK_TOOL = {
+  name: 'Images, video, Office, ZIP and QR',
+  dir: join(KIT, 'tools', 'shrink'),
+  pages: SHRINK_PAGES,
+  files: [
+    ...SHRINK_PAGES.map((p) => [`${p}.html`, `src/pages/${p}.html`]),
+    ...['shrink-common.ts', 'shrink.css', 'upng.d.ts', 'photo-meta.ts', 'compress-image-page.ts', 'resize-image-page.ts', 'convert-image-page.ts', 'photo-info-page.ts', 'office-page.ts', 'video-page.ts', 'zip-page.ts', 'qr-page.ts'].map((f) => [f, `src/js/logic/kit-shrink/${f}`]),
+  ],
+  category: `  {
+    name: 'Make files smaller',
+    tools: [
+${entry('compress-pdf', 'Compress PDF', 'ph-file-pdf', 'Make a PDF smaller, or fit it under a size.')}${entry('compress-image', 'Compress Images', 'ph-image-square', 'Make JPG, PNG, WebP and iPhone photos smaller.')}${entry('compress-video', 'Compress Video', 'ph-film-strip', 'Make videos smaller for email, WhatsApp and uploads.')}${entry('compress-office', 'Compress Word, PowerPoint or Excel', 'ph-file-doc', 'Shrink the pictures inside DOCX, PPTX and XLSX files.')}${entry('resize-image', 'Resize Images', 'ph-resize', 'Change the size of pictures, or fit a post or profile.')}${entry('zip-files', 'ZIP Files', 'ph-file-zip', 'Put files in a ZIP, or open one.')}    ],
+  },
+  {
+    name: 'Photos and images',
+    tools: [
+${entry('convert-image', 'Convert Images', 'ph-swap', 'HEIC to JPG, WebP to JPG, PNG to JPG and more.')}${entry('resize-image', 'Resize Images', 'ph-resize', 'Pixels, percent, or sizes for posts and profiles.')}${entry('compress-image', 'Compress Images', 'ph-image-square', 'Smaller pictures, or under a size like 200 KB.')}${entry('remove-photo-info', 'Remove Photo Info', 'ph-eye-slash', 'Take location, camera and date out of photos.')}    ],
+  },
+  {
+    name: 'Handy tools',
+    tools: [
+${entry('qr-code', 'QR Code Generator', 'ph-qr-code', 'QR codes for links, Wi-Fi, contacts, email and phone.')}${entry('zip-files', 'ZIP Files', 'ph-file-zip', 'Put files in a ZIP, or open one and take files out.')}    ],
+  },
+`,
+  packages: ['upng-js@2.1.0', 'qrcode@1.5.4', '@types/qrcode@1.5.5', 'mediabunny@1.65.2'],
+};
+
 const VITE_CONFIG = join(ROOT, 'vite.config.ts');
 const TOOLS_CONFIG = join(ROOT, 'src/js/config/tools.ts');
 const VITE_ANCHOR = '          // Tool Pages\n';
@@ -426,8 +455,9 @@ const KIT_TOOLS = [
   ESIGN_TOOL,
   MORE_TOOL,
   DOCS_TOOL,
+  SHRINK_TOOL,
 ];
-const KIT_LOGIC_DIRS = ['src/js/logic/kit-scan', 'src/js/logic/kit-esign', 'src/js/logic/kit-more', 'src/js/logic/kit-docs'];
+const KIT_LOGIC_DIRS = ['src/js/logic/kit-scan', 'src/js/logic/kit-esign', 'src/js/logic/kit-more', 'src/js/logic/kit-docs', 'src/js/logic/kit-shrink'];
 
 // The search box on every page (kit/tools/pin/flow.js) reads /tools-index.json: each tool's
 // page, name, words and icon, taken from the tool list as built (BentoPDF's plus the kit's).
@@ -489,7 +519,7 @@ function installKitTools() {
     `${VITE_ANCHOR}          // [phase0-kit] Paperhaus tools (temporary)\n${inputs}`));
   let next = tools
     .replace(POPULAR_ANCHOR, `${POPULAR_ANCHOR}      // [phase0-kit]\n${SCAN_TOOL.popular}`)
-    .replace(CATEGORY_ANCHOR, `  // [phase0-kit]\n${SCAN_TOOL.category}${MORE_TOOL.category}${CATEGORY_ANCHOR}`)
+    .replace(CATEGORY_ANCHOR, `  // [phase0-kit]\n${SCAN_TOOL.category}${MORE_TOOL.category}${SHRINK_TOOL.category}${CATEGORY_ANCHOR}`)
     .replaceAll(SIGN_PDF_ENTRY, `      // [phase0-kit]\n${ESIGN_TOOL.replacesSignPdf}`)
     .replaceAll(MULTI_TOOL_ENTRY, PAGES_ENTRY);
   for (const [cat, item] of MORE_TOOL.inserts) {
@@ -512,8 +542,10 @@ function ensureKitPackages() {
     return !existsSync(join(ROOT, 'node_modules', name, 'package.json'));
   });
   if (!missing.length) return;
-  log(`Installing for the Paperhaus tools: ${missing.join(', ')}`);
-  run('npm', ['install', '--no-save', '--no-audit', '--no-fund', '--ignore-scripts', ...missing]);
+  // All of them in one go: npm drops packages it doesn't know about on every --no-save install.
+  const all = KIT_TOOLS.flatMap((t) => t.packages || []);
+  log(`Installing for the Paperhaus tools: ${all.join(', ')}`);
+  run('npm', ['install', '--no-save', '--no-audit', '--no-fund', '--ignore-scripts', ...all]);
 }
 
 function installKitToolAssets(target) {
@@ -653,7 +685,7 @@ const HOME_TASKS = [
   ['#edit', 'ph-pencil-simple-line', 'Edit', 'Change text, add images, notes or highlights, fill in forms.'],
   ['pdf-multi-tool.html', 'ph-squares-four', 'Combine or split', 'Merge files, reorder, rotate, delete or pull out pages.'],
   ['#convert', 'ph-arrows-left-right', 'Convert', 'Turn Word, Excel, PowerPoint or photos into PDF, and back.'],
-  ['compress-pdf.html', 'ph-arrows-in', 'Make smaller', 'Shrink a PDF so it is easy to email.'],
+  ['#smaller', 'ph-arrows-in', 'Make smaller', 'Shrink PDFs, photos, videos and Office files.'],
   ['#secure', 'ph-shield-check', 'Protect', 'Add a password, or black out private details.'],
   ['scan-document.html', 'ph-scan', 'Scan', 'Take photos of paper pages and get a clean PDF.'],
   ['#ai', 'ph-sparkle', 'Summarize or translate', 'Get a summary, translate it, or find text in a scan.'],

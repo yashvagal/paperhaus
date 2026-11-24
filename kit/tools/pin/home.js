@@ -14,7 +14,8 @@
 
   // Hubs: which of the tool list's categories each one shows.
   var HUBS = {
-    convert: { title: 'Convert', sub: 'To and from PDF: Word, Excel, PowerPoint, images, web pages and more.', cats: ['convert-to-pdf', 'convert-from-pdf'] },
+    convert: { title: 'Convert', sub: 'To and from PDF: Word, Excel, PowerPoint, images, web pages and more. Pictures to JPG, PNG or WebP.', cats: ['convert-to-pdf', 'convert-from-pdf', 'photos-and-images'] },
+    smaller: { title: 'Make smaller', sub: 'PDFs, photos, videos and Word, PowerPoint or Excel files. All on this device, no size limit.', cats: ['make-files-smaller'] },
     edit: { title: 'Edit', sub: 'Text, images, notes, highlights, stamps and form fields.', cats: ['edit-annotate'] },
     secure: { title: 'Secure and redact', sub: 'Passwords, permissions, redaction, hidden data and signatures.', cats: ['secure-pdf'] },
     ai: { title: 'AI on this device', sub: 'Summarize, translate and read scans. Nothing is uploaded.', cats: ['ai-on-this-device'] },
@@ -76,9 +77,18 @@
     })) {
       return [
         ['image-to-pdf', files.length > 1 ? 'Make one PDF from them' : 'Make a PDF', true],
+        ['compress-image', 'Make smaller'],
+        ['resize-image', 'Resize'],
+        ['convert-image', 'Change to JPG, PNG or WebP'],
+        ['remove-photo-info', 'Remove photo info'],
         ['scan-document', 'Clean up as a scan'],
       ];
     }
+    if (kinds.every(function (k) {
+      return k === 'video';
+    })) return [['compress-video', 'Make smaller', true]];
+    if (files.length > 1 && !pdfs) return [['zip-files', 'Put them in a ZIP', true]];
+    if (/^zip$/.test(ext(files[0].name))) return [['zip-files', 'Open the ZIP', true]];
     if (kinds[0] === 'pdf') {
       return [
         ['request-signatures?mode=me', 'Sign it', true],
@@ -95,6 +105,7 @@
       ];
     }
     var page = TO_PDF[ext(files[0].name)];
+    if (page && kinds[0] === 'office') return [[page, 'Convert to PDF', true], ['compress-office', 'Make smaller']];
     if (page) return [[page, 'Convert to PDF', true]];
     return [];
   }
