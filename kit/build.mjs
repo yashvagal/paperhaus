@@ -681,24 +681,36 @@ const withEm = (t) => escapeHtml(t).replace(/\*([^*]+)\*/g, '<em>$1</em>');
 // files and pinned tools, written into BentoPDF's header block. kit/tools/pin/home.js
 // makes it work; the full tool list stays below it under "All tools".
 const HOME_TASKS = [
-  ['request-signatures.html', 'ph-signature', 'Sign', 'Sign it yourself, or send it to others to sign.'],
-  ['#edit', 'ph-pencil-simple-line', 'Edit', 'Change text, add images, notes or highlights, fill in forms.'],
-  ['pdf-multi-tool.html', 'ph-squares-four', 'Combine or split', 'Merge files, reorder, rotate, delete or pull out pages.'],
-  ['#convert', 'ph-arrows-left-right', 'Convert', 'Turn Word, Excel, PowerPoint or photos into PDF, and back.'],
-  ['#smaller', 'ph-arrows-in', 'Make smaller', 'Shrink PDFs, photos, videos and Office files.'],
-  ['#secure', 'ph-shield-check', 'Protect', 'Add a password, or black out private details.'],
-  ['scan-document.html', 'ph-scan', 'Scan', 'Take photos of paper pages and get a clean PDF.'],
-  ['#ai', 'ph-sparkle', 'Summarize or translate', 'Get a summary, translate it, or find text in a scan.'],
+  ['request-signatures.html', 'pen', 'Sign', 'Sign it yourself, or send it to others to sign.'],
+  ['#edit', 'pencil', 'Edit', 'Change text, add images, notes or highlights, fill in forms.'],
+  ['pdf-multi-tool.html', 'stapler', 'Combine or split', 'Merge files, reorder, rotate, delete or pull out pages.'],
+  ['#convert', 'copier', 'Convert', 'Turn Word, Excel, PowerPoint or photos into PDF, and back.'],
+  ['#smaller', 'press', 'Make smaller', 'Shrink PDFs, photos, videos and Office files.'],
+  ['#secure', 'lock', 'Protect', 'Add a password, or black out private details.'],
+  ['scan-document.html', 'camera', 'Scan', 'Take photos of paper pages and get a clean PDF.'],
+  ['#ai', 'lens', 'Summarize or translate', 'Get a summary, translate it, or find text in a scan.'],
 ];
+
+// Each task is an office object on the desk. Drawn here, no outside artwork.
+const DESK_OBJECTS = {
+  pen: '<g transform="rotate(-28 60 40)"><rect x="18" y="34" width="70" height="12" rx="6" fill="#1f2a44"/><rect x="62" y="34" width="8" height="12" fill="#c9a24b"/><path d="M88 34 L104 40 L88 46 Z" fill="#c9a24b"/><path d="M98 38.2 L104 40 L98 41.8 Z" fill="#2b2b2b"/><rect x="22" y="31" width="30" height="3" rx="1.5" fill="#c9a24b"/></g><path d="M14 68 c8 -10 14 6 22 -2 s10 -8 16 0 s8 4 14 -3" fill="none" stroke="#1f2a44" stroke-width="2.4" stroke-linecap="round"/>',
+  pencil: '<g transform="rotate(-24 60 40)"><rect x="16" y="33" width="72" height="14" fill="#f2b736"/><rect x="16" y="33" width="72" height="4.5" fill="#f7cd62"/><rect x="8" y="33" width="10" height="14" rx="3" fill="#e57b7b"/><rect x="16" y="33" width="6" height="14" fill="#b8b8b8"/><path d="M88 33 L106 40 L88 47 Z" fill="#f1d9b0"/><path d="M100 37.7 L106 40 L100 42.3 Z" fill="#333"/></g>',
+  stapler: '<rect x="14" y="58" width="92" height="9" rx="4" fill="#2d2f33"/><path d="M18 56 L98 44 Q106 43 106 50 L106 54 Q106 57 100 57 L20 60 Z" fill="#c63d2f"/><path d="M22 52 L96 40 Q104 39 104 45 L22 56 Z" fill="#e05a47"/><circle cx="24" cy="57" r="3.2" fill="#8f9399"/><rect x="88" y="59.5" width="12" height="3" rx="1" fill="#8f9399"/>',
+  copier: '<rect x="18" y="14" width="44" height="56" rx="3" fill="#ffffff" stroke="#c9c2b2" stroke-width="2"/><g fill="#c9c2b2"><rect x="25" y="24" width="30" height="3" rx="1.5"/><rect x="25" y="32" width="24" height="3" rx="1.5"/><rect x="25" y="40" width="28" height="3" rx="1.5"/></g><rect x="58" y="22" width="44" height="56" rx="3" fill="#e8f0fb" stroke="#7da0d6" stroke-width="2"/><g fill="#7da0d6"><rect x="65" y="32" width="30" height="3" rx="1.5"/><rect x="65" y="40" width="22" height="3" rx="1.5"/><rect x="65" y="48" width="26" height="3" rx="1.5"/></g><path d="M40 8 Q66 0 84 16" fill="none" stroke="#2f6fbf" stroke-width="3" stroke-linecap="round"/><path d="M84 8 L86 18 L76 18" fill="none" stroke="#2f6fbf" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>',
+  press: '<rect x="56" y="4" width="8" height="22" fill="#8f9399"/><rect x="40" y="4" width="40" height="6" rx="3" fill="#5c5f66"/><rect x="22" y="26" width="76" height="10" rx="2" fill="#4a4d54"/><rect x="26" y="40" width="68" height="10" fill="#ffffff" stroke="#c9c2b2" stroke-width="2"/><path d="M30 45 h60" stroke="#c9c2b2" stroke-width="2"/><rect x="22" y="54" width="76" height="10" rx="2" fill="#4a4d54"/><rect x="14" y="26" width="8" height="46" rx="2" fill="#2f3237"/><rect x="98" y="26" width="8" height="46" rx="2" fill="#2f3237"/><rect x="10" y="70" width="100" height="6" rx="3" fill="#2f3237"/>',
+  lock: '<path d="M42 38 V28 a18 18 0 0 1 36 0 V38" fill="none" stroke="#8f9399" stroke-width="7"/><rect x="32" y="36" width="56" height="40" rx="6" fill="#c9a24b"/><rect x="32" y="36" width="56" height="8" rx="4" fill="#ddb963"/><circle cx="60" cy="54" r="5" fill="#5b4614"/><rect x="58" y="56" width="4" height="10" rx="2" fill="#5b4614"/>',
+  camera: '<rect x="14" y="24" width="92" height="50" rx="8" fill="#2d2f33"/><rect x="40" y="16" width="26" height="12" rx="3" fill="#2d2f33"/><rect x="14" y="34" width="92" height="6" fill="#43464c"/><circle cx="60" cy="50" r="18" fill="#9aa3ad"/><circle cx="60" cy="50" r="13" fill="#1b2a3a"/><circle cx="55" cy="45" r="4" fill="#5d7f9e"/><rect x="88" y="28" width="10" height="5" rx="2" fill="#e9c46a"/>',
+  lens: '<rect x="14" y="16" width="58" height="60" rx="3" fill="#ffffff" stroke="#c9c2b2" stroke-width="2"/><g fill="#c9c2b2"><rect x="22" y="26" width="40" height="3" rx="1.5"/><rect x="22" y="34" width="34" height="3" rx="1.5"/><rect x="22" y="42" width="38" height="3" rx="1.5"/><rect x="22" y="50" width="28" height="3" rx="1.5"/></g><circle cx="70" cy="40" r="20" fill="rgba(180,215,255,0.35)" stroke="#5c5f66" stroke-width="6"/><rect x="84" y="54" width="26" height="9" rx="4.5" transform="rotate(40 84 54)" fill="#7a4a2a"/>',
+};
 
 function homeMarkup(env) {
   const eyebrow = escapeHtml((env.BRAND_NAME || 'paperhaus').toLowerCase());
   const title = withEm(env.HOME_TITLE || 'What are we *working on?*');
   const note = escapeHtml(env.HOME_NOTE || 'Tools run on your device. Recent files sync encrypted');
-  const tasks = HOME_TASKS.map(([href, icon, name, sub], i) =>
-    `<a class="ph-task" href="${href}" style="--c:var(--c${(i % 6) + 1});--i:var(--i${(i % 6) + 1})">` +
-    `<span class="ph-task-icon"><i class="ph ${icon}" aria-hidden="true"></i></span>` +
-    `<span class="ph-task-name">${escapeHtml(name)}</span><span class="ph-task-sub">${escapeHtml(sub)}</span></a>`).join('');
+  const tasks = HOME_TASKS.map(([href, object, name, sub], i) =>
+    `<a class="ph-task ph-desk-item" href="${href}" style="--n:${i}">` +
+    `<span class="ph-object"><svg viewBox="0 0 120 80" aria-hidden="true" focusable="false">${DESK_OBJECTS[object]}</svg></span>` +
+    `<span class="ph-tag"><span class="ph-task-name">${escapeHtml(name)}</span><span class="ph-task-sub">${escapeHtml(sub)}</span></span></a>`).join('');
   return '<!--ph-header-->' +
     // BentoPDF's script rewrites the header's first h2 and first p (simple mode); these
     // hidden two take that, so the real headings keep their words.
@@ -717,7 +729,7 @@ function homeMarkup(env) {
     `</div>` +
     `<div id="ph-suggest" class="ph-suggest" hidden></div>` +
     `<div class="ph-sec-head"><h2>Or choose what to do</h2><a id="ph-all-link" href="#all-tools">See all tools</a></div>` +
-    `<div class="ph-tasks">${tasks}</div>` +
+    `<div class="ph-tasks ph-desk">${tasks}</div>` +
     `<div class="ph-lists">` +
     `<div class="ph-card" id="ph-recent"><div class="ph-card-head"><h2>Recent files</h2><a href="my-documents.html">See all</a></div><div id="ph-recent-list"></div></div>` +
     `<div class="ph-card" id="ph-sent"><div class="ph-card-head"><h2>Sent for signature</h2><a href="request-signatures.html#documents">See all</a></div><div id="ph-sent-list"><p class="ph-muted">Loading...</p></div></div>` +
