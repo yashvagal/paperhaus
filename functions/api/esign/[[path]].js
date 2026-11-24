@@ -28,6 +28,7 @@
  *   POST /api/esign/p/:id/decline?t=    a signer declines (body: encrypted reason, optional)
  *   POST /api/esign/p/:id/cancel?t=     the sender cancels it (body { now: true } deletes it at once)
  *   POST /api/esign/p/:id/restore?t=    the sender undoes a cancel (within UNDO_DAYS)
+ *   POST /api/esign/p/:id/reopen?t=     the sender sends it again: DAYS more to sign (signatures so far stay)
  *   POST /api/esign/p/:id/seal?t=       seal a finished PDF (body: JSON { digest: hex })
  *   POST /api/esign/p/:id/final?t=      store the sealed copy (body: encrypted PDF, x-fingerprint header)
  *   GET  /api/esign/p/:id/final?t=      the sealed copy (encrypted)
@@ -43,7 +44,7 @@
 
 import { sealDigest, b64 as b64u8 } from '../../_shared/seal.js';
 import { getRequestMail, mailConfigured, sendMail } from '../../_shared/gmail.js';
-import { runReminders } from '../../_shared/reminders.js';
+import { runReminders, scheduleReminders } from '../../_shared/reminders.js';
 
 const DAYS = 14; // time to sign
 const UNDO_DAYS = 7; // a cancelled request can be restored for this long
@@ -97,6 +98,7 @@ export async function onRequest(context) {
       }
       if (method === 'POST' && action === 'cancel') return await cancel(request, env, id, meta, who);
       if (method === 'POST' && action === 'restore') return await restore(env, id, meta, who);
+      if (method === 'POST' && action === 'reopen') return await reopen(request, env, id, meta, who);
       if (method === 'POST' && action === 'seal') return await seal(request, env, id, meta);
       if (method === 'POST' && action === 'final') return await storeFinal(request, env, id, meta, who);
       if (method === 'GET' && action === 'final') return bytes(await env.ESIGN.get(`f:${id}`, 'arrayBuffer'));
@@ -138,7 +140,8 @@ async function create(request, env) {
     readToken: info.readToken,
     sender,
     created,
-    expires: created + DAYS * 86400000,
+    // Local testing only: ESIGN_TEST_SIGN_MS shortens the time to sign.
+    expires: created + (env.ESIGN_TEST_SIGN_MS ? Number(env.ESIGN_TEST_SIGN_MS) : DAYS * 86400000),
     keep,
     retainUntil: expiration * 1000,
     status: 'out',
@@ -275,6 +278,41 @@ async function restore(env, id, meta, who) {
   await env.ESIGN.put(`m:${id}`, JSON.stringify(meta), { expiration: exp(meta) });
   await env.ESIGN.delete(`cx:${id}`);
   return json({ ok: true });
+}
+
+const MAX_REOPENS = 5;
+
+/** Send it again: the signing links work for DAYS more; signatures already given stay. */
+async function reopen(request, env, id, meta, who) {
+  if (who.role !== 'sender') return json({ error: 'not_the_sender' }, 403);
+  if (meta.status !== 'out') return json({ error: meta.status }, 409);
+  const before = await state(env, id, meta, who, false);
+  if (before.status === 'complete') return json({ error: 'complete' }, 409);
+  if ((meta.reopened || 0) >= MAX_REOPENS) return json({ error: 'too_many' }, 409);
+  const oldUntil = retainUntil(meta);
+  meta.expires = Date.now() + DAYS * 86400000;
+  meta.reopened = (meta.reopened || 0) + 1;
+  if (oldUntil < meta.expires) {
+    // Kept for less time than the new window: keep everything until the window ends.
+    meta.retainUntil = meta.expires;
+    await rekeep(env, id, meta);
+  }
+  await env.ESIGN.put(`m:${id}`, JSON.stringify(meta), { expiration: exp(meta) });
+  await logEvent(env, id, meta, request, 'reopened', 'sender', { until: meta.expires });
+  const mail = await getRequestMail(env, id);
+  if (mail && mail.remind !== false) await scheduleReminders(env, id, meta);
+  return json(await state(env, id, meta, who, false));
+}
+
+/** Store the request's pieces again with the (later) deletion time in meta. */
+async function rekeep(env, id, meta) {
+  const keys = [`d:${id}`, `e:${id}`, `a:${id}`, `f:${id}`];
+  for (let i = 0; i < meta.n; i++) keys.push(`s:${id}:${i}`, `v:${id}:${i}`);
+  for (const k of keys) {
+    const got = await env.ESIGN.getWithMetadata(k, 'arrayBuffer');
+    if (got.value === null) continue;
+    await env.ESIGN.put(k, got.value, { expiration: exp(meta), ...(got.metadata ? { metadata: got.metadata } : {}) });
+  }
 }
 
 async function purge(env, id, meta) {

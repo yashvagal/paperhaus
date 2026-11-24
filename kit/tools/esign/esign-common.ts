@@ -91,6 +91,7 @@ export interface AuditEvent {
   timestamp?: string;
   docSha256?: string;
   consent?: boolean;
+  until?: number;
 }
 
 export interface Sealed {
@@ -255,6 +256,10 @@ export const api = {
   },
   async restore(id: string, t: string): Promise<void> {
     await call(`/api/esign/p/${id}/restore?t=${encodeURIComponent(t)}`, { method: 'POST' });
+  },
+  /** Send it again: 14 more days to sign, signatures so far stay. */
+  async reopen(id: string, t: string): Promise<State> {
+    return (await call(`/api/esign/p/${id}/reopen?t=${encodeURIComponent(t)}`, { method: 'POST' })).json();
   },
   async seal(id: string, t: string, digest: string): Promise<SealResult> {
     return (
@@ -599,6 +604,8 @@ export function eventText(e: AuditEvent, env: Envelope): string {
       return 'Declined to sign';
     case 'completed':
       return 'Everyone has signed';
+    case 'reopened':
+      return `Sent again by the sender, open until ${formatDate(Number(e.until) || e.t)}`;
     case 'sealed':
       return e.timestamp && e.timestamp !== 'none' ? `Sealed and timestamped (${e.timestamp})` : 'Sealed (no timestamp server answered)';
     default:

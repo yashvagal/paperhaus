@@ -664,6 +664,44 @@ const notifyMe = (): boolean => prefs.get('notify') !== '0';
 const remindOn = (): boolean => prefs.get('remind') !== '0';
 
 /** Remind signer i now, from the connected Gmail, in their invite thread. */
+/**
+ * Time ran out: open it for 14 more days (signatures already given stay) and email a fresh
+ * invite to whoever still has to sign (only the next one when the order is fixed).
+ */
+async function sendAgain(s: Sent, state: State): Promise<void> {
+  busy('Sending again...');
+  try {
+    const next = await api.reopen(s.id, s.senderToken);
+    s.expires = next.expires;
+    s.retainUntil = Math.max(s.retainUntil || 0, next.retainUntil || 0);
+    await saveSent(s);
+    let waiting = s.signers.map((_, i) => i).filter((i) => !state.signers[i].signed);
+    if (s.ordered) waiting = waiting.slice(0, 1);
+    const targets = waiting.filter((i) => !isMe(s, i));
+    let sent = 0;
+    if (gmail.connected && targets.length) {
+      await mailSetup(s);
+      for (const i of targets) {
+        try {
+          await sendInvite(s, i);
+          sent++;
+        } catch {
+          /* counted below */
+        }
+      }
+    }
+    docGroup = 'waiting';
+    if (!targets.length) toast(`Open again until ${formatDate(s.expires)}. It is your turn to sign.`);
+    else if (sent === targets.length) toast(`Sent again to ${names(targets.map((i) => s.signers[i].name))}. Open until ${formatDate(s.expires)}.`);
+    else showAlert('Open again, but not every email went out', `It is open until ${formatDate(s.expires)}. Use Details to copy the signing link and send it yourself.`);
+    void renderSent();
+  } catch (err) {
+    showAlert('Could not send it again', String((err as Error).message || err));
+  } finally {
+    busy(null);
+  }
+}
+
 async function remindSigner(s: Sent, i: number): Promise<number> {
   await mailSetup(s);
   const res = (await mailPost('/api/mail/remind', { id: s.id, t: s.senderToken, index: i, link: signLink(s.id, fromB64(s.key), s.tokens[i]) })) as { at?: number };
@@ -1150,6 +1188,7 @@ function fillSent(item: HTMLElement, s: Sent, state: State | null): void {
     actions.appendChild(button('Delete now', 'es-danger', () => void deleteNow(s)));
     return;
   }
+  if (state.status === 'expired') actions.appendChild(button('<i class="ph ph-paper-plane-tilt"></i> Send again', 'es-primary', () => void sendAgain(s, state)));
   if (state.status === 'out' && gmail.connected) {
     let waiting = s.signers.map((_, i) => i).filter((i) => !state.signers[i].signed);
     if (s.ordered) waiting = waiting.slice(0, 1);
