@@ -1152,8 +1152,8 @@ html {
   cursor: pointer;
 }
 .es-tab[aria-selected='true'] {
-  background: var(--es-accent);
-  color: var(--on-accent, #fff);
+  background: var(--btn-grad, var(--btn-bg, var(--es-accent)));
+  color: var(--btn-text, #fff);
 }
 .es-badge {
   min-width: 1.35rem;

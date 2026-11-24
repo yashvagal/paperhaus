@@ -65,10 +65,10 @@
     "firstLoadNotice": "First load takes a moment as we download our conversion engine. After that, all loads will be instant."
   },
   "upload": {
-    "clickToSelect": "Click to select a file",
-    "orDragAndDrop": "or drag and drop",
+    "clickToSelect": "Choose a file",
+    "orDragAndDrop": "or drop it here",
     "pdfOrImages": "PDFs or Images",
-    "filesNeverLeave": "Your files never leave your device.",
+    "filesNeverLeave": "Files stay on your device.",
     "addMore": "Add More Files",
     "clearAll": "Clear All",
     "clearFiles": "Clear Files",

@@ -464,14 +464,31 @@ const KIT_LOGIC_DIRS = ['src/js/logic/kit-scan', 'src/js/logic/kit-esign', 'src/
 let TOOL_INDEX = [];
 function toolIndex(src) {
   const out = [];
-  const seen = new Set();
+  const byHref = new Map();
+  // Each tool also records the groups it is listed in (slugs, like the tools page's is-cat-*),
+  // so every tool page can show its group's desk object and link back to it.
+  const heads = [];
+  const hr = /name:\s*'((?:[^'\\]|\\.)*)',\s*tools:\s*\[/g;
+  let h;
+  while ((h = hr.exec(src))) heads.push([h.index, h[1].toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')]);
+  const catAt = (i) => {
+    let c = '';
+    for (const [at, slug] of heads) if (at < i) c = slug;
+    return c;
+  };
   const re = /href:\s*import\.meta\.env\.BASE_URL\s*\+\s*'([^']+)',\s*name:\s*'((?:[^'\\]|\\.)*)',\s*icon:\s*'([^']+)',\s*subtitle:\s*'((?:[^'\\]|\\.)*)'/g;
   let m;
   while ((m = re.exec(src))) {
     const [, href, name, icon, sub] = m;
-    if (seen.has(href)) continue;
-    seen.add(href);
-    out.push({ href, name: name.replace(/\\'/g, "'"), icon, sub: sub.replace(/\\'/g, "'") });
+    const cat = catAt(m.index);
+    if (byHref.has(href)) {
+      const t = byHref.get(href);
+      if (cat && !t.cats.includes(cat)) t.cats.push(cat);
+      continue;
+    }
+    const t = { href, name: name.replace(/\\'/g, "'"), icon, sub: sub.replace(/\\'/g, "'"), cats: cat ? [cat] : [] };
+    byHref.set(href, t);
+    out.push(t);
   }
   return out;
 }
@@ -704,7 +721,6 @@ const DESK_OBJECTS = {
 };
 
 function homeMarkup(env) {
-  const eyebrow = escapeHtml((env.BRAND_NAME || 'paperhaus').toLowerCase());
   const title = withEm(env.HOME_TITLE || 'What are we *working on?*');
   const note = escapeHtml(env.HOME_NOTE || 'Tools run on your device. Recent files sync encrypted');
   const tasks = HOME_TASKS.map(([href, object, name, sub], i) =>
@@ -716,7 +732,7 @@ function homeMarkup(env) {
     // hidden two take that, so the real headings keep their words.
     '<h2 hidden></h2><p hidden></p>' +
     `<section id="ph-home" class="ph-home">` +
-    `<div class="ph-eyebrow">${eyebrow}</div><h1 class="ph-title">${title}</h1>` +
+    `<h1 class="ph-title">${title}</h1>` +
     `<button type="button" id="ph-home-search" class="ph-home-search"><i class="ph ph-magnifying-glass" aria-hidden="true"></i><span>Search tools and your documents</span><kbd>/</kbd></button>` +
     `<div id="ph-drop" class="ph-drop">` +
     `<i class="ph ph-upload-simple ph-drop-icon" aria-hidden="true"></i>` +
@@ -830,6 +846,8 @@ const PIN_MARK = 'data-paperhaus-pin';
 // before Gmail sending can be switched on. Copied as is from kit/public/.
 function writeToolIndex() {
   if (TOOL_INDEX.length) writeFileSync(join(DIST, 'tools-index.json'), JSON.stringify(TOOL_INDEX));
+  // The desk's drawn objects, for the small picture beside each tool page's title.
+  writeFileSync(join(DIST, 'desk.json'), JSON.stringify(DESK_OBJECTS));
 }
 
 function copyPublicPages() {
@@ -842,7 +860,7 @@ function addPinning(env) {
   const out = join(DIST, 'kit-tools', 'pin');
   mkdirSync(out, { recursive: true });
   let hash = 0;
-  for (const f of ['pin.js', 'pin.css', 'flow.js', 'flow.css', 'home.js', 'home.css']) {
+  for (const f of ['pin.js', 'pin.css', 'flow.js', 'flow.css', 'home.js', 'home.css', 'shell.js', 'shell.css']) {
     const text = readFileSync(join(KIT, 'tools', 'pin', f), 'utf8');
     for (let i = 0; i < text.length; i++) hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
     writeFileSync(join(out, f), text);
@@ -865,9 +883,11 @@ function addPinning(env) {
     (sourceUrl ? `<meta name="paperhaus-source" content="${escapeHtml(sourceUrl)}" ${PIN_MARK}>` : '') +
     `<link rel="stylesheet" href="/kit-tools/pin/pin.css?v=${v}" ${PIN_MARK}>` +
     `<link rel="stylesheet" href="/kit-tools/pin/flow.css?v=${v}" ${PIN_MARK}>` +
+    `<link rel="stylesheet" href="/kit-tools/pin/shell.css?v=${v}" ${PIN_MARK}>` +
     // flow.js first: it has to see the blob links tools make for their downloads.
     `<script src="/kit-tools/pin/flow.js?v=${v}" defer ${PIN_MARK}></script>` +
-    `<script src="/kit-tools/pin/pin.js?v=${v}" defer ${PIN_MARK}></script>`;
+    `<script src="/kit-tools/pin/pin.js?v=${v}" defer ${PIN_MARK}></script>` +
+    `<script src="/kit-tools/pin/shell.js?v=${v}" defer ${PIN_MARK}></script>`;
   // Start loading the next page as soon as a link is pressed (Chrome), so moving between
   // pages is quicker. Only same-site pages, never the API. Sent as a Speculation-Rules
   // header (see writeHeaders), because the content security policy blocks inline rules.

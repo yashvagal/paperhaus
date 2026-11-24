@@ -1,0 +1,209 @@
+/* Paperhaus: one layout for every tool page (kit/tools/pin/shell.js). Paper cards like the
+ * tags on the Home desk; the group's desk object beside the title. Theme tokens only. */
+:root {
+  --paper: var(--surface);
+  --paper-line: var(--line);
+  --paper-edge: var(--line-strong);
+  --paper-shadow: 0 1px 0 var(--paper-edge), 0 18px 30px -24px rgba(58, 42, 31, 0.45);
+  --wood: linear-gradient(180deg, #c99566 0%, #b9814f 100%);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper-shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 18px 30px -22px rgba(0, 0, 0, 0.85);
+    --wood: linear-gradient(180deg, #8a6243 0%, #74513a 100%);
+  }
+}
+
+/* The frame */
+.ph-tool-page #uploader {
+  display: block;
+  min-height: 0;
+  padding: 0 0 3.5rem;
+}
+.ph-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding-top: 1.5rem;
+}
+.ph-tool-page main.ph-shell.es-wrap {
+  padding-top: 1.5rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+.ph-tool-page #back-to-tools {
+  display: none !important;
+}
+
+.ph-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.ph-crumbs a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.ph-crumbs a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ph-crumb-here {
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.ph-tool-head {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  min-width: 0;
+}
+.ph-spot {
+  flex: none;
+  width: 5.5rem;
+  height: 4.25rem;
+  border-radius: 10px;
+  background: var(--wood);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 10px 18px -14px rgba(58, 42, 31, 0.7);
+  display: grid;
+  place-items: center;
+}
+.ph-spot svg {
+  width: 84%;
+  height: auto;
+}
+.ph-spot.is-empty {
+  display: none;
+}
+.ph-tool-title {
+  min-width: 0;
+}
+.ph-tool-title h1 {
+  margin: 0 !important;
+  font-size: clamp(1.8rem, 4vw, 2.5rem) !important;
+  line-height: 1.1 !important;
+  text-wrap: balance;
+}
+.ph-tool-title p {
+  margin: 0.35rem 0 0 !important;
+  color: var(--text-2) !important;
+  font-size: 1rem !important;
+  max-width: 62ch;
+  text-wrap: pretty;
+}
+@media (max-width: 560px) {
+  .ph-spot {
+    width: 4rem;
+    height: 3.1rem;
+  }
+  .ph-tool-head {
+    gap: 0.8rem;
+  }
+}
+
+/* The tool itself, on a paper card */
+.ph-shell #tool-uploader {
+  position: relative;
+  max-width: none !important;
+  width: 100%;
+  margin: 0;
+  background: var(--paper);
+  border: 1px solid var(--paper-line);
+  border-radius: 16px;
+  box-shadow: var(--paper-shadow);
+}
+.ph-shell #tool-uploader::before,
+.ph-shell .es-card::before {
+  content: '';
+  position: absolute;
+  top: 0.8rem;
+  left: 0.9rem;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: inset 0 1px 2px rgba(58, 42, 31, 0.35);
+  pointer-events: none;
+}
+.ph-shell .es-card {
+  position: relative;
+  border-radius: 16px;
+  border-color: var(--paper-line);
+  box-shadow: var(--paper-shadow);
+}
+
+/* More in <group> */
+.ph-more {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.ph-more h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.ph-more-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr));
+  gap: 0.6rem;
+}
+.ph-more-tag {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.7rem 0.9rem 0.75rem 1.8rem;
+  border-radius: 8px;
+  background: var(--paper);
+  border: 1px solid var(--paper-line);
+  box-shadow: 0 1px 0 var(--paper-edge), 0 10px 18px -16px rgba(58, 42, 31, 0.6);
+  color: var(--text);
+  text-decoration: none;
+  min-height: 2.75rem;
+  transition: transform 0.15s ease-out, border-color 0.15s ease-out;
+}
+.ph-more-tag::before {
+  content: '';
+  position: absolute;
+  left: 0.7rem;
+  top: 1.05rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: inset 0 1px 2px rgba(58, 42, 31, 0.4);
+}
+.ph-more-tag:hover,
+.ph-more-tag:focus-visible {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.ph-more-tag strong {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.ph-more-tag span {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.ph-local {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ph-more-tag {
+    transition: none;
+  }
+  .ph-more-tag:hover {
+    transform: none;
+  }
+}
