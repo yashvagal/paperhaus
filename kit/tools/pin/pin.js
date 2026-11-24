@@ -256,23 +256,29 @@
       var peopleItem = el('a', { href: '/people', role: 'menuitem', class: 'ph-menu-item', hidden: '' },
         '<i class="ph ph-users-three" aria-hidden="true"></i> Who can use Paperhaus');
       menu.appendChild(peopleItem);
-      fetch('/api/admin/me', { credentials: 'same-origin' })
-        .then(function (r) { return r.ok ? r.json() : {}; })
-        .then(function (j) { if (j && j.admin) peopleItem.removeAttribute('hidden'); })
-        .catch(function () {});
+      adminMe().then(function (j) { if (j && j.admin) peopleItem.removeAttribute('hidden'); });
       // Recent files live in this browser (flow.js), and in the account when sync is on; this empties both.
+      // It removes every kept file on all devices, so it asks once more first.
       if (window.paperhausFlow) {
-        var clear = el('button', { type: 'button', role: 'menuitem', class: 'ph-menu-item' },
-          '<i class="ph ph-broom" aria-hidden="true"></i> Clear recent files');
-        clear.addEventListener('click', function () {
+        var clear = el('button', { type: 'button', role: 'menuitem', class: 'ph-menu-item ph-menu-quiet' },
+          '<i class="ph ph-broom" aria-hidden="true"></i> Clear my files');
+        clear.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (!clear.classList.contains('is-sure')) {
+            clear.classList.add('is-sure');
+            clear.innerHTML = '<i class="ph ph-warning" aria-hidden="true"></i> Remove all my files? Tap again';
+            return;
+          }
           window.paperhausFlow.clear().then(function () {
-            clear.innerHTML = '<i class="ph ph-check" aria-hidden="true"></i> Recent files cleared';
+            clear.classList.remove('is-sure');
+            clear.innerHTML = '<i class="ph ph-check" aria-hidden="true"></i> Files cleared';
             var list = document.getElementById('ph-recent-list');
             if (list) location.reload();
           });
         });
         menu.appendChild(clear);
       }
+      menu.appendChild(el('div', { class: 'ph-menu-sep', role: 'separator' }));
       var out = el('a', { href: '/cdn-cgi/access/logout', role: 'menuitem', class: 'ph-menu-item' },
         '<i class="ph ph-sign-out" aria-hidden="true"></i> Sign out');
       out.addEventListener('click', function () {
@@ -287,6 +293,16 @@
   document.addEventListener('click', function (e) {
     if (menu && !menu.contains(e.target)) closeMenu();
   });
+
+  var adminMeP = null;
+  function adminMe() {
+    if (!adminMeP) {
+      adminMeP = fetch('/api/admin/me', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : {}; })
+        .catch(function () { return {}; });
+    }
+    return adminMeP;
+  }
 
   function showAccount() {
     // Show the last known sign-in straight away, then confirm it with Access.
@@ -307,6 +323,13 @@
         if (!id.email) throw new Error('no email');
         store.set('ph-identity', JSON.stringify(id));
         renderAccount(id);
+        // The name from the invite list ("Yash Vagal") reads better than the email's first part.
+        adminMe().then(function (me) {
+          if (!me || !me.name || me.name === id.name || (me.email && me.email !== id.email)) return;
+          id.name = me.name;
+          store.set('ph-identity', JSON.stringify(id));
+          renderAccount(id);
+        });
       })
       .catch(function () {
         // Not behind Access (for example a local preview): no account chip.

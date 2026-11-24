@@ -366,7 +366,16 @@
   }
   .es-signer .es-signer-email,
   .es-signer .es-reason {
-    grid-column: 2 / 3;
+    grid-column: 2 / -1;
+  }
+  .es-signer .es-reason select {
+    flex: 1;
+    min-width: 0;
+  }
+  /* The trash button stays on the name row. */
+  .es-signer > .es-btn {
+    grid-row: 1;
+    grid-column: 3;
   }
 }
 .es-reason {
@@ -379,9 +388,10 @@
   white-space: nowrap;
 }
 .es-reason select {
-  min-height: 2.4rem;
-  padding: 0 0.5rem;
   width: auto;
+  min-width: 8.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
 }
 .es-signer-me .es-signer-name {
   font-weight: 700;
@@ -1258,4 +1268,94 @@ html {
   color: var(--es-accent);
   font-weight: 700;
   text-decoration: none;
+}
+
+/* ---------------------------------------------------------------- dropdowns and small parts */
+/* One look for every dropdown: same height as text boxes, a drawn arrow, readable lists in dark mode. */
+select.es-input {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 2.4rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23a08c7a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.8rem center;
+  background-size: 1rem;
+  cursor: pointer;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+select.es-input:hover {
+  border-color: var(--es-accent);
+}
+select.es-input option {
+  background-color: var(--es-surface);
+  color: var(--es-text);
+  font-weight: 500;
+}
+/* The trash button on a signer row lines up with the text boxes. */
+.es-signer > .es-btn {
+  width: 2.9rem;
+  min-height: 2.9rem;
+  padding: 0;
+}
+.es-signer > .es-btn i {
+  font-size: 1.1rem;
+}
+.es-signer .es-input {
+  min-height: 2.9rem;
+}
+/* Long names (file names without spaces) wrap instead of pushing things sideways. */
+.es-h1,
+#es-title,
+.es-modal,
+.es-modal * {
+  overflow-wrap: anywhere;
+}
+.es-modal {
+  overflow-x: hidden;
+}
+/* The "Ready to sign" dialog. */
+.es-modal-kicker {
+  margin: 0 0 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--es-accent);
+}
+.es-modal-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+.es-modal-note {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+}
+.es-consent {
+  margin: 0 0 1.2rem;
+  padding: 0.85rem 0.9rem;
+  border-radius: 14px;
+  border: 1px solid var(--es-line);
+  background: var(--es-surface-2);
+  cursor: pointer;
+  line-height: 1.45;
+}
+.es-consent input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.05rem;
+}
+.es-modal-acts {
+  justify-content: flex-end;
+}
+@media (max-width: 480px) {
+  .es-modal-acts {
+    flex-wrap: nowrap;
+  }
+  .es-modal-acts .es-btn {
+    flex: 1;
+  }
 }

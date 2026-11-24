@@ -27,8 +27,10 @@ export const createLanguageSwitcher = (): HTMLElement => {
   textSpan.className = 'font-medium';
   textSpan.textContent = languageNames[currentLang];
 
-  const chevron = document.createElement('svg');
-  chevron.className = 'w-4 h-4';
+  // An SVG needs its own namespace, or the arrow never shows.
+  const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  chevron.setAttribute('class', 'w-4 h-4');
+  chevron.setAttribute('aria-hidden', 'true');
   chevron.setAttribute('fill', 'none');
   chevron.setAttribute('stroke', 'currentColor');
   chevron.setAttribute('viewBox', '0 0 24 24');
@@ -95,6 +97,7 @@ export const createLanguageSwitcher = (): HTMLElement => {
       ${lang === currentLang ? 'bg-gray-700' : ''}
     `.trim();
     option.setAttribute('role', 'menuitem');
+    if (lang === currentLang) option.setAttribute('aria-current', 'true');
     option.dataset.lang = lang;
     option.dataset.searchKey = `${languageNames[lang]} ${lang}`.toLowerCase();
 

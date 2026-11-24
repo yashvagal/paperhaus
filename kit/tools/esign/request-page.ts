@@ -37,6 +37,7 @@ import {
   sha256hex,
   signLink,
   signedName,
+  niceTitle,
 } from './esign-common.js';
 
 interface Draft {
@@ -241,7 +242,7 @@ async function loadFile(file: File): Promise<void> {
     $('es-doc-name').textContent = file.name;
     $('es-doc-info').textContent = `${pdf.numPages} page${pdf.numPages === 1 ? '' : 's'}`;
     const title = $<HTMLInputElement>('es-title');
-    if (!title.value) title.value = file.name.replace(/\.pdf$/i, '');
+    if (!title.value) title.value = niceTitle(file.name);
     await drawPages();
   } catch (err) {
     console.error(err);
@@ -524,7 +525,7 @@ function updateCreateHint(): void {
 async function create(): Promise<void> {
   const from = $<HTMLInputElement>('es-from').value.trim();
   const fromName = $<HTMLInputElement>('es-from-name').value.trim() || identity.name || from.split('@')[0];
-  const title = $<HTMLInputElement>('es-title').value.trim() || draft.file?.name.replace(/\.pdf$/i, '') || 'Document';
+  const title = $<HTMLInputElement>('es-title').value.trim() || niceTitle(draft.file?.name || '') || 'Document';
   const message = $<HTMLTextAreaElement>('es-message').value.trim();
   const ordered = $<HTMLInputElement>('es-ordered').checked;
 

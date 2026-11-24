@@ -71,6 +71,7 @@
   right: 0;
   top: calc(100% + 0.5rem);
   min-width: 15rem;
+  max-width: calc(100vw - 2rem);
   padding: 0.4rem;
   border-radius: 18px;
   background: var(--surface, #1f2937);
@@ -111,8 +112,38 @@
   cursor: pointer;
   color: var(--text, #f3f4f6);
 }
-.ph-menu-item:hover {
+.ph-menu-item:hover,
+.ph-menu-item:focus-visible {
   background: var(--surface-2, #111827);
+  outline: none;
+}
+.ph-menu-item {
+  font-size: 0.92rem;
+  min-height: 2.6rem;
+  text-decoration: none;
+}
+.ph-menu-item i {
+  width: 1.25rem;
+  font-size: 1.1rem;
+  flex: none;
+  text-align: center;
+  color: var(--accent, #818cf8);
+}
+.ph-menu-quiet,
+.ph-menu-quiet i {
+  color: var(--muted, #9ca3af);
+}
+.ph-menu-item.is-sure,
+.ph-menu-item.is-sure i {
+  color: var(--bad, #dc2626);
+}
+.ph-menu-sep {
+  height: 1px;
+  margin: 0.3rem 0.5rem;
+  background: var(--line, #374151);
+}
+.ph-menu-who strong {
+  overflow-wrap: anywhere;
 }
 .ph-sheet {
   position: fixed;

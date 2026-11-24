@@ -37,6 +37,15 @@ export interface Signer {
   reason?: string;
 }
 
+/** A file name made readable: no .pdf, underscores and dashes between words become spaces. */
+export function niceTitle(s: string): string {
+  return String(s || '')
+    .replace(/\.pdf$/i, '')
+    .replace(/[_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export const REASONS = ['Author', 'Approved', 'Reviewed', 'Agreed', 'Witness', 'Received'];
 
 export interface Envelope {

@@ -35,6 +35,7 @@ import {
   textPng,
   trimPng,
   typedPng,
+  niceTitle,
 } from './esign-common.js';
 
 type Value = { png: string; text?: string; checked?: boolean };
@@ -137,7 +138,7 @@ async function start(): Promise<void> {
   me = state.role === 'signer' && state.index !== null ? state.index : -1;
   if (me >= 0 && !state.signers[me].signed && state.status === 'out') void api.view(link.id, link.token).catch((): undefined => undefined);
   await loadSubs();
-  document.title = `${env.title} | Signature request`;
+  document.title = `${niceTitle(env.title)} | Signature request`;
   await show();
 }
 
@@ -162,7 +163,7 @@ async function show(): Promise<void> {
   $('es-load').classList.add('hidden');
   $('es-doc-view').classList.remove('hidden');
   $('es-from').textContent = `From ${env.sender.name}${env.sender.email ? ` (${env.sender.email})` : ''} · ${formatDate(env.createdAt)}`;
-  $('es-title').textContent = env.title;
+  $('es-title').textContent = niceTitle(env.title);
   const msg = $('es-message');
   msg.classList.toggle('hidden', !env.message);
   msg.textContent = env.message;
@@ -535,17 +536,18 @@ function confirmFinish(): Promise<boolean> {
     wrap.className = 'es-modal-wrap';
     wrap.innerHTML = `
       <div class="es-modal" role="dialog" aria-modal="true">
-        <h3 class="es-h2" data-title></h3>
-        <p class="es-sub" data-reason style="margin:0"></p>
-        <label class="es-check-row" style="margin:0.6rem 0 1rem"><input type="checkbox" /> <span data-consent></span></label>
-        <div class="es-row" style="justify-content:flex-end">
+        <p class="es-modal-kicker">Ready to sign</p>
+        <h3 class="es-modal-title" data-title></h3>
+        <p class="es-sub es-modal-note" data-reason></p>
+        <label class="es-check-row es-consent"><input type="checkbox" /> <span data-consent></span></label>
+        <div class="es-row es-modal-acts">
           <button type="button" class="es-btn" data-v="0">Back</button>
           <button type="button" class="es-btn es-primary" data-v="1" disabled><i class="ph ph-signature"></i> Sign</button>
         </div>
       </div>`;
-    wrap.querySelector('[data-title]')!.textContent = `Sign “${env.title}”`;
+    wrap.querySelector('[data-title]')!.textContent = niceTitle(env.title);
     wrap.querySelector('[data-consent]')!.textContent = CONSENT;
-    wrap.querySelector('[data-reason]')!.textContent = `You are signing as: ${env.signers[me]?.reason || 'Signer'}. This is recorded with your signature.`;
+    wrap.querySelector('[data-reason]')!.textContent = `Your role: ${env.signers[me]?.reason || 'Signer'}. It is recorded with your signature.`;
     const box = wrap.querySelector<HTMLInputElement>('input')!;
     const ok = wrap.querySelector<HTMLButtonElement>('[data-v="1"]')!;
     box.onchange = () => (ok.disabled = !box.checked);
