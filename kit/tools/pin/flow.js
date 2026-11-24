@@ -16,6 +16,9 @@
   'use strict';
 
   var DB = 'paperhaus-flow';
+  // Build version from this script's address, for /tools-index.json (the service worker keeps
+  // .json cache-first, so each build fetches it at a new address).
+  var BUILD_V = ((document.currentScript && document.currentScript.src) || '').split('?v=')[1] || '';
   var MAX_FILES = 30;
   var MAX_BYTES = 200 * 1024 * 1024;
 
@@ -906,7 +909,7 @@
   var toolsP = null;
   function toolList() {
     if (!toolsP) {
-      toolsP = fetch('/tools-index.json', { credentials: 'same-origin' })
+      toolsP = fetch('/tools-index.json?v=' + BUILD_V, { credentials: 'same-origin' })
         .then(function (r) {
           return r.ok ? r.json() : [];
         })

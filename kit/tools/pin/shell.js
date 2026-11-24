@@ -18,6 +18,8 @@
 (function () {
   'use strict';
 
+  // Same ?v= as this script: the service worker keeps .json cache-first, so a new build needs a new address.
+  var V = ((document.currentScript && document.currentScript.src) || '').split('?v=')[1] || '';
   var page = (location.pathname.split('/').pop() || '').replace(/\.html$/, '');
   if (/^(|index|my-documents|view-document|people|privacy|about|sign-request|licensing|faq|contact|terms|404)$/.test(page)) return;
 
@@ -115,7 +117,7 @@
     more.append(moreHead, list, note);
     shell.appendChild(more);
 
-    Promise.all([getJSON('/tools-index.json'), getJSON('/desk.json')]).then(function (r) {
+    Promise.all([getJSON('/tools-index.json?v=' + V), getJSON('/desk.json?v=' + V)]).then(function (r) {
       var tools = Array.isArray(r[0]) ? r[0] : [];
       var desk = r[1] || {};
       var me = tools.filter(function (t) {

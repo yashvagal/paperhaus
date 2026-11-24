@@ -865,6 +865,10 @@ function addPinning(env) {
     for (let i = 0; i < text.length; i++) hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
     writeFileSync(join(out, f), text);
   }
+  // The tool list and desk drawings are fetched by these scripts and the service worker keeps
+  // .json files cache-first, so they are fetched with the same ?v= and change it when they change.
+  const data = JSON.stringify(TOOL_INDEX) + JSON.stringify(DESK_OBJECTS);
+  for (let i = 0; i < data.length; i++) hash = (hash * 31 + data.charCodeAt(i)) >>> 0;
   const v = hash.toString(36);
   const brand = escapeHtml(env.BRAND_NAME);
   // The public Paperhaus website, linked from the account menu. Only http(s) addresses.
